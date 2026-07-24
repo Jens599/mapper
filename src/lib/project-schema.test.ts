@@ -3,18 +3,14 @@ import { describe, expect, it } from "vitest";
 import { sampleProject } from "@/data/sample-project";
 import { parseProject, projectSchema } from "@/lib/project-schema";
 
-describe("project schema", () => {
-  it("accepts the versioned sample project", () => {
+describe("travel project schema", () => {
+  it("accepts the versioned sample trip", () => {
     expect(parseProject(sampleProject)).toEqual(sampleProject);
   });
 
-  it("rejects a route that references a missing waypoint", () => {
+  it("rejects a leg that references a missing stop", () => {
     const invalidProject = structuredClone(sampleProject);
-    const route = invalidProject.layers.find((layer) => layer.type === "route");
-
-    if (route?.type === "route") {
-      route.waypointIds.push("missing-place");
-    }
+    invalidProject.legs[0].to = "missing-place";
 
     const result = projectSchema.safeParse(invalidProject);
 
@@ -24,9 +20,9 @@ describe("project schema", () => {
     }
   });
 
-  it("rejects duplicate layer IDs", () => {
+  it("rejects duplicate object IDs", () => {
     const invalidProject = structuredClone(sampleProject);
-    invalidProject.layers[1].id = invalidProject.layers[0].id;
+    invalidProject.legs[0].id = invalidProject.stops[0].id;
 
     expect(projectSchema.safeParse(invalidProject).success).toBe(false);
   });

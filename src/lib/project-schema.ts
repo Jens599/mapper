@@ -5,29 +5,48 @@ const idSchema = z
   .min(1)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase kebab-case IDs");
 
-const baseLayerSchema = z.object({
+export const coordinateSchema = z.tuple([
+  z.number().min(-180).max(180),
+  z.number().min(-90).max(90),
+]);
+
+export const stopSchema = z.object({
   id: idSchema,
   name: z.string().trim().min(1).max(80),
+  coordinates: coordinateSchema,
+  dayLabel: z.string().trim().min(1).max(24),
+  icon: z.enum([
+    "city",
+    "temple",
+    "mountain",
+    "airport",
+    "lake",
+    "camp",
+    "viewpoint",
+  ]),
+  elevation: z.number().finite().optional(),
   visible: z.boolean().default(true),
-  locked: z.boolean().default(false),
 });
 
-export const waypointLayerSchema = baseLayerSchema.extend({
-  type: z.literal("waypoints"),
-  points: z
-    .array(
-      z.object({
-        id: idSchema,
-        name: z.string().trim().min(1).max(80),
-        x: z.number().finite(),
-        y: z.number().finite(),
-        elevation: z.number().finite().optional(),
-      }),
-    )
-    .min(1),
+export const legStyleSchema = z.object({
+  line: z.enum(["solid", "dashed"]),
+  curvature: z.number().min(-1).max(1),
+  winding: z.number().min(0).max(1),
+  color: z.string().regex(/^#[0-9a-f]{6}$/i),
 });
 
-export const routeNoiseSchema = z.object({
+export const travelLegSchema = z.object({
+  id: idSchema,
+  name: z.string().trim().min(1).max(100),
+  from: idSchema,
+  to: idSchema,
+  mode: z.enum(["walk", "drive", "flight", "train", "boat"]),
+  via: z.array(coordinateSchema).max(100).default([]),
+  style: legStyleSchema,
+  visible: z.boolean().default(true),
+});
+
+export const trailNoiseSchema = z.object({
   seed: z.number().int().min(0).max(2_147_483_647),
   amplitude: z.number().min(0).max(500),
   wavelength: z.number().min(1).max(2_000),
@@ -40,113 +59,150 @@ export const routeNoiseSchema = z.object({
   smoothing: z.number().min(0).max(1),
 });
 
-export const routeLayerSchema = baseLayerSchema.extend({
-  type: z.literal("route"),
-  mode: z.enum(["joined", "segments"]),
-  waypointLayerId: idSchema,
-  waypointIds: z.array(idSchema).min(2),
-  noise: routeNoiseSchema,
-});
-
-export const contourLayerSchema = baseLayerSchema.extend({
-  type: z.literal("contours"),
-  seed: z.number().int().min(0).max(2_147_483_647),
-  interval: z.number().positive(),
-  resolution: z.number().int().min(16).max(1024),
-  opacity: z.number().min(0).max(1),
-});
-
-export const scatterLayerSchema = baseLayerSchema.extend({
-  type: z.literal("scatter"),
-  iconId: z.string().min(1),
-  seed: z.number().int().min(0).max(2_147_483_647),
-  count: z.number().int().min(1).max(10_000),
-  scaleMin: z.number().positive(),
-  scaleMax: z.number().positive(),
-});
-
-export const iconLayerSchema = baseLayerSchema.extend({
-  type: z.literal("icon"),
-  iconId: z.string().min(1),
+export const trailWaypointSchema = z.object({
+  id: idSchema,
+  name: z.string().trim().min(1).max(80),
   x: z.number().finite(),
   y: z.number().finite(),
-  scale: z.number().positive(),
-  rotation: z.number().min(-360).max(360),
+  elevation: z.number().finite().optional(),
+  iconId: z.string().optional(),
+  visible: z.boolean().default(true),
 });
 
-export const layerSchema = z.discriminatedUnion("type", [
-  waypointLayerSchema,
-  routeLayerSchema,
-  contourLayerSchema,
-  scatterLayerSchema,
-  iconLayerSchema,
-]);
+export const trailRouteSchema = z.object({
+  id: idSchema,
+  name: z.string().trim().min(1).max(100),
+  waypointIds: z.array(idSchema).min(2),
+  mode: z.enum(["joined", "segments"]),
+  noise: trailNoiseSchema,
+  visible: z.boolean().default(true),
+});
 
-export const projectSchema = z
-  .object({
-    version: z.literal(1),
+const travelProjectSchema = z.object({
+    version: z.literal(2),
+    kind: z.literal("travel"),
     id: idSchema,
     name: z.string().trim().min(1).max(120),
-    units: z.enum(["m", "ft", "abstract"]),
-    canvas: z.object({
-      width: z.number().positive().max(100_000),
-      height: z.number().positive().max(100_000),
-      background: z.string().regex(/^#[0-9a-f]{6}$/i),
-      showGrid: z.boolean(),
+    durationDays: z.number().int().positive().max(9_999),
+    subtitle: z.string().trim().max(160).default(""),
+    map: z.object({
+      style: z.enum(["positron", "liberty", "bright"]),
+      showContours: z.boolean(),
+      showHillshade: z.boolean(),
+      contourInterval: z.number().int().min(10).max(1_000),
+      elevationUnits: z.enum(["m", "ft"]),
     }),
-    layers: z.array(layerSchema),
-  })
-  .superRefine((project, context) => {
-    const ids = new Set<string>();
+    stops: z.array(stopSchema).min(2),
+    legs: z.array(travelLegSchema),
+  });
 
-    for (const layer of project.layers) {
-      if (ids.has(layer.id)) {
+const trailProjectSchema = z.object({
+  version: z.literal(2),
+  kind: z.literal("trail"),
+  id: idSchema,
+  name: z.string().trim().min(1).max(120),
+  units: z.enum(["m", "ft", "abstract"]),
+  canvas: z.object({
+    width: z.number().positive().max(100_000),
+    height: z.number().positive().max(100_000),
+    background: z.string().regex(/^#[0-9a-f]{6}$/i),
+    showGrid: z.boolean(),
+  }),
+  terrain: z.object({
+    visible: z.boolean(),
+    seed: z.number().int().min(0).max(2_147_483_647),
+    contourInterval: z.number().positive(),
+    opacity: z.number().min(0).max(1),
+  }),
+  waypoints: z.array(trailWaypointSchema).min(2),
+  routes: z.array(trailRouteSchema),
+  icons: z.array(
+    z.object({
+      id: idSchema,
+      iconId: z.string().min(1),
+      x: z.number().finite(),
+      y: z.number().finite(),
+      scale: z.number().positive(),
+      rotation: z.number().min(-360).max(360),
+      visible: z.boolean().default(true),
+    }),
+  ),
+});
+
+export const projectSchema = z
+  .discriminatedUnion("kind", [travelProjectSchema, trailProjectSchema])
+  .superRefine((project, context) => {
+    const objectIds = new Set<string>();
+
+    const objects =
+      project.kind === "travel"
+        ? [...project.stops, ...project.legs]
+        : [...project.waypoints, ...project.routes, ...project.icons];
+
+    for (const object of objects) {
+      if (objectIds.has(object.id)) {
         context.addIssue({
           code: "custom",
-          message: `Layer ID '${layer.id}' is duplicated`,
-          path: ["layers"],
+          message: `Object ID '${object.id}' is duplicated`,
+          path: [project.kind === "travel" ? "legs" : "routes"],
         });
       }
-      ids.add(layer.id);
+      objectIds.add(object.id);
     }
 
-    for (const layer of project.layers) {
-      if (layer.type !== "route") continue;
+    if (project.kind === "trail") {
+      const waypointIds = new Set(project.waypoints.map((point) => point.id));
+      for (const route of project.routes) {
+        if (new Set(route.waypointIds).size < 2) {
+          context.addIssue({
+            code: "custom",
+            message: `Trail route '${route.id}' must use at least two distinct waypoints`,
+            path: ["routes"],
+          });
+        }
+        const missing = route.waypointIds.find((id) => !waypointIds.has(id));
+        if (missing) {
+          context.addIssue({
+            code: "custom",
+            message: `Trail route '${route.id}' references missing waypoint '${missing}'`,
+            path: ["routes"],
+          });
+        }
+      }
+      return;
+    }
 
-      const waypointLayer = project.layers.find(
-        (candidate) =>
-          candidate.id === layer.waypointLayerId &&
-          candidate.type === "waypoints",
-      );
-
-      if (!waypointLayer || waypointLayer.type !== "waypoints") {
-        context.addIssue({
-          code: "custom",
-          message: `Route '${layer.id}' references a missing waypoint layer`,
-          path: ["layers"],
-        });
-        continue;
+    const stopIds = new Set(project.stops.map((stop) => stop.id));
+    for (const leg of project.legs) {
+      for (const endpoint of [leg.from, leg.to]) {
+        if (!stopIds.has(endpoint)) {
+          context.addIssue({
+            code: "custom",
+            message: `Travel leg '${leg.id}' references missing stop '${endpoint}'`,
+            path: ["legs"],
+          });
+        }
       }
 
-      const waypointIds = new Set(
-        waypointLayer.points.map((waypoint) => waypoint.id),
-      );
-      const missing = layer.waypointIds.find((id) => !waypointIds.has(id));
-
-      if (missing) {
+      if (leg.from === leg.to) {
         context.addIssue({
           code: "custom",
-          message: `Route '${layer.id}' references missing waypoint '${missing}'`,
-          path: ["layers"],
+          message: `Travel leg '${leg.id}' must connect two different stops`,
+          path: ["legs"],
         });
       }
     }
   });
 
 export type MapperProject = z.infer<typeof projectSchema>;
-export type MapperLayer = z.infer<typeof layerSchema>;
-export type RouteLayer = z.infer<typeof routeLayerSchema>;
-export type RouteNoise = z.infer<typeof routeNoiseSchema>;
+export type TravelProject = z.infer<typeof travelProjectSchema>;
+export type TrailProject = z.infer<typeof trailProjectSchema>;
+export type TravelStop = z.infer<typeof stopSchema>;
+export type TravelLeg = z.infer<typeof travelLegSchema>;
+export type LegStyle = z.infer<typeof legStyleSchema>;
+export type Coordinate = z.infer<typeof coordinateSchema>;
+export type TrailNoise = z.infer<typeof trailNoiseSchema>;
+export type TrailRoute = z.infer<typeof trailRouteSchema>;
 
 export function parseProject(input: unknown): MapperProject {
   return projectSchema.parse(input);

@@ -151,6 +151,97 @@
   .focus-ring {
     @apply focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50;
   }
+
+  .mapper-stop {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: 0;
+    background: transparent;
+    color: #18221d;
+    cursor: pointer;
+    font-family: var(--font-atkinson), sans-serif;
+    filter: drop-shadow(0 1px 1px rgb(255 255 255 / 90%));
+    white-space: nowrap;
+  }
+
+  .mapper-stop:focus-visible,
+  .mapper-mode:focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 3px;
+  }
+
+  .mapper-stop__dot {
+    width: 0.78rem;
+    height: 0.78rem;
+    flex: none;
+    border: 2px solid white;
+    border-radius: 999px;
+    background: var(--trail);
+    box-shadow: 0 0 0 1px rgb(24 34 29 / 55%);
+  }
+
+  .mapper-stop__label {
+    display: grid;
+    justify-items: start;
+    line-height: 1;
+    text-shadow:
+      -1px -1px 0 rgb(255 255 255 / 90%),
+      1px -1px 0 rgb(255 255 255 / 90%),
+      -1px 1px 0 rgb(255 255 255 / 90%),
+      1px 1px 0 rgb(255 255 255 / 90%);
+  }
+
+  .mapper-stop__label strong {
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+  }
+
+  .mapper-stop__label small {
+    margin-top: 0.2rem;
+    padding: 0.18rem 0.25rem;
+    border-radius: 2px;
+    background: var(--trail);
+    color: white;
+    font-family: var(--font-plex-mono), monospace;
+    font-size: 0.54rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-shadow: none;
+  }
+
+  .mapper-stop.is-selected .mapper-stop__dot {
+    box-shadow:
+      0 0 0 2px white,
+      0 0 0 5px var(--water);
+  }
+
+  .mapper-mode {
+    border: 1px solid rgb(24 34 29 / 35%);
+    border-radius: 999px;
+    background: rgb(248 250 248 / 94%);
+    color: #243a30;
+    cursor: pointer;
+    font-family: var(--font-plex-mono), monospace;
+    font-size: 0.48rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    padding: 0.22rem 0.34rem;
+    text-transform: uppercase;
+    box-shadow: 0 1px 2px rgb(24 34 29 / 18%);
+  }
+
+  .mapper-mode.is-selected {
+    border-color: var(--water);
+    box-shadow: 0 0 0 2px white, 0 0 0 4px var(--water);
+  }
+
+  .maplibregl-ctrl-attrib {
+    font-family: var(--font-atkinson), sans-serif;
+    font-size: 10px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

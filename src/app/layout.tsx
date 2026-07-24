@@ -7,6 +7,7 @@ import {
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
+import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 
 const atkinson = Atkinson_Hyperlegible_Next({

@@ -1,166 +1,527 @@
 "use client";
 
 import { LocateFixed, Minus, Plus } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type {
+  ExpressionSpecification,
+  GeoJSONSource,
+  Map as MapLibreMap,
+  Marker,
+} from "maplibre-gl";
 
 import { Button } from "@/components/ui/button";
+import { TrailCanvas } from "@/components/editor/trail-canvas";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { TravelProject } from "@/lib/project-schema";
+import {
+  buildTravelLegsGeoJson,
+  getLegCoordinates,
+} from "@/lib/travel-geometry";
 import { useEditorStore } from "@/store/editor-store";
 
-const contours = [
-  "M-40 566 C130 500 212 612 370 544 S664 445 1080 510",
-  "M-55 490 C105 428 208 532 354 463 S650 380 1060 428",
-  "M-25 412 C126 348 242 452 393 384 S678 292 1045 344",
-  "M36 334 C181 277 274 366 430 302 S728 218 1030 264",
-  "M110 247 C245 205 342 283 492 218 S758 145 956 179",
-  "M238 166 C355 134 430 198 568 142 S786 87 905 110",
-];
+const OPEN_FREE_MAP_STYLES = {
+  positron: "https://tiles.openfreemap.org/styles/positron",
+  liberty: "https://tiles.openfreemap.org/styles/liberty",
+  bright: "https://tiles.openfreemap.org/styles/bright",
+} as const;
+const TERRAIN_TILES =
+  "https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png";
 
-const trees = [
-  [520, 456],
-  [558, 474],
-  [604, 444],
-  [640, 478],
-  [684, 436],
-  [724, 468],
-  [752, 421],
-  [790, 451],
-  [823, 405],
-];
+type MapLibreModule = typeof import("maplibre-gl");
+
+function getTripBounds(project: TravelProject): [[number, number], [number, number]] {
+  const longitudes = project.stops.map((stop) => stop.coordinates[0]);
+  const latitudes = project.stops.map((stop) => stop.coordinates[1]);
+  return [
+    [Math.min(...longitudes), Math.min(...latitudes)],
+    [Math.max(...longitudes), Math.max(...latitudes)],
+  ];
+}
+
+function addTravelLayers(map: MapLibreMap, project: TravelProject) {
+  map.addSource("travel-legs", {
+    type: "geojson",
+    data: buildTravelLegsGeoJson(project, null),
+  });
+
+  const widthExpression: ExpressionSpecification = [
+    "case",
+    ["boolean", ["get", "selected"], false],
+    4.5,
+    2.7,
+  ];
+
+  map.addLayer({
+    id: "travel-leg-halo",
+    type: "line",
+    source: "travel-legs",
+    paint: {
+      "line-color": "rgba(255,255,255,0.9)",
+      "line-width": ["case", ["boolean", ["get", "selected"], false], 9, 7],
+      "line-opacity": 0.88,
+    },
+    layout: {
+      "line-cap": "round",
+      "line-join": "round",
+    },
+  });
+
+  map.addLayer({
+    id: "travel-leg-solid",
+    type: "line",
+    source: "travel-legs",
+    filter: ["==", ["get", "line"], "solid"],
+    paint: {
+      "line-color": ["get", "color"],
+      "line-width": widthExpression,
+    },
+    layout: {
+      "line-cap": "round",
+      "line-join": "round",
+    },
+  });
+
+  map.addLayer({
+    id: "travel-leg-dashed",
+    type: "line",
+    source: "travel-legs",
+    filter: ["==", ["get", "line"], "dashed"],
+    paint: {
+      "line-color": ["get", "color"],
+      "line-width": widthExpression,
+      "line-dasharray": [2, 2.2],
+    },
+    layout: {
+      "line-cap": "round",
+      "line-join": "round",
+    },
+  });
+
+  map.addLayer({
+    id: "travel-direction",
+    type: "symbol",
+    source: "travel-legs",
+    layout: {
+      "symbol-placement": "line",
+      "symbol-spacing": 92,
+      "text-field": "›",
+      "text-size": 19,
+      "text-keep-upright": false,
+      "text-rotation-alignment": "map",
+      "text-allow-overlap": true,
+    },
+    paint: {
+      "text-color": ["get", "color"],
+      "text-halo-color": "rgba(255,255,255,0.95)",
+      "text-halo-width": 1.5,
+    },
+  });
+}
+
+function addTerrainLayers(
+  map: MapLibreMap,
+  demSource: InstanceType<
+    (typeof import("maplibre-contour"))["default"]["DemSource"]
+  >,
+  project: TravelProject,
+) {
+  const unitMultiplier = project.map.elevationUnits === "ft" ? 3.28084 : 1;
+  const interval = project.map.contourInterval;
+
+  map.addSource("mapper-dem", {
+    type: "raster-dem",
+    encoding: "terrarium",
+    tiles: [demSource.sharedDemProtocolUrl],
+    maxzoom: 13,
+    tileSize: 256,
+    attribution:
+      'Elevation: <a href="https://registry.opendata.aws/terrain-tiles/">Mapzen Terrain Tiles</a>',
+  });
+
+  map.addLayer(
+    {
+      id: "mapper-hillshade",
+      type: "hillshade",
+      source: "mapper-dem",
+      layout: {
+        visibility: project.map.showHillshade ? "visible" : "none",
+      },
+      paint: {
+        "hillshade-exaggeration": 0.22,
+        "hillshade-shadow-color": "#365344",
+        "hillshade-highlight-color": "#f4f7f3",
+        "hillshade-accent-color": "#849b8f",
+      },
+    },
+    map.getStyle().layers.find((layer) => layer.type === "symbol")?.id,
+  );
+
+  map.addSource("mapper-contours", {
+    type: "vector",
+    tiles: [
+      demSource.contourProtocolUrl({
+        multiplier: unitMultiplier,
+        thresholds: {
+          7: [interval * 5, interval * 10],
+          9: [interval * 2, interval * 10],
+          11: [interval, interval * 5],
+          13: [Math.max(10, interval / 2), interval * 5],
+        },
+        contourLayer: "contours",
+        elevationKey: "ele",
+        levelKey: "level",
+        extent: 4096,
+        buffer: 1,
+      }),
+    ],
+    maxzoom: 15,
+    attribution:
+      'Elevation: <a href="https://registry.opendata.aws/terrain-tiles/">Mapzen Terrain Tiles</a>',
+  });
+
+  const firstLabel = map.getStyle().layers.find(
+    (layer) => layer.type === "symbol",
+  )?.id;
+
+  map.addLayer(
+    {
+      id: "mapper-contour-lines",
+      type: "line",
+      source: "mapper-contours",
+      "source-layer": "contours",
+      layout: {
+        visibility: project.map.showContours ? "visible" : "none",
+      },
+      paint: {
+        "line-color": "#557564",
+        "line-opacity": 0.52,
+        "line-width": ["match", ["get", "level"], 1, 1.15, 0.55],
+      },
+    },
+    firstLabel,
+  );
+
+  map.addLayer(
+    {
+      id: "mapper-contour-labels",
+      type: "symbol",
+      source: "mapper-contours",
+      "source-layer": "contours",
+      filter: [">", ["get", "level"], 0],
+      layout: {
+        visibility: project.map.showContours ? "visible" : "none",
+        "symbol-placement": "line",
+        "text-size": 10,
+        "text-field": [
+          "concat",
+          ["number-format", ["get", "ele"], { "max-fraction-digits": 0 }],
+          project.map.elevationUnits,
+        ],
+      },
+      paint: {
+        "text-color": "#466554",
+        "text-halo-color": "rgba(244,247,245,0.9)",
+        "text-halo-width": 1.2,
+      },
+    },
+    firstLabel,
+  );
+}
+
+function createStopElement(
+  stop: TravelProject["stops"][number],
+  selected: boolean,
+  selectObject: (id: string) => void,
+) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `mapper-stop${selected ? " is-selected" : ""}`;
+  button.setAttribute(
+    "aria-label",
+    `${stop.name}, ${stop.dayLabel}${stop.elevation ? `, ${stop.elevation} meters` : ""}`,
+  );
+  button.addEventListener("click", () => selectObject(stop.id));
+
+  const dot = document.createElement("span");
+  dot.className = "mapper-stop__dot";
+  dot.setAttribute("aria-hidden", "true");
+
+  const label = document.createElement("span");
+  label.className = "mapper-stop__label";
+
+  const name = document.createElement("strong");
+  name.textContent = stop.name;
+
+  const day = document.createElement("small");
+  day.textContent = stop.dayLabel;
+
+  label.append(name, day);
+  button.append(dot, label);
+  return button;
+}
+
+function createModeElement(
+  mode: TravelProject["legs"][number]["mode"],
+  legId: string,
+  selected: boolean,
+  selectObject: (id: string) => void,
+) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `mapper-mode${selected ? " is-selected" : ""}`;
+  button.textContent = mode;
+  button.setAttribute("aria-label", `Select ${mode} travel leg`);
+  button.addEventListener("click", () => selectObject(legId));
+  return button;
+}
 
 export function MapCanvas() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const maplibreRef = useRef<MapLibreModule | null>(null);
+  const markersRef = useRef<Marker[]>([]);
+  const [ready, setReady] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(7.2);
   const project = useEditorStore((state) => state.project);
-  const zoom = useEditorStore((state) => state.zoom);
-  const zoomIn = useEditorStore((state) => state.zoomIn);
-  const zoomOut = useEditorStore((state) => state.zoomOut);
-  const resetZoom = useEditorStore((state) => state.resetZoom);
-  const route = project.layers.find((layer) => layer.type === "route");
-  const waypointLayer = project.layers.find(
-    (layer) => layer.type === "waypoints",
-  );
-  const contourLayer = project.layers.find(
-    (layer) => layer.type === "contours",
-  );
-  const scatterLayer = project.layers.find((layer) => layer.type === "scatter");
-  const amplitude = route?.type === "route" ? route.noise.amplitude : 0;
-  const offset = amplitude * 0.75;
-  const viewWidth = project.canvas.width / zoom;
-  const viewHeight = project.canvas.height / zoom;
-  const viewX = (project.canvas.width - viewWidth) / 2;
-  const viewY = (project.canvas.height - viewHeight) / 2;
-  const routePath = [
-    "M132 555",
-    `C210 ${520 - offset}, 300 ${485 + offset}, 400 405`,
-    `C470 ${350 - offset}, 568 ${337 + offset}, 655 250`,
-    `C720 ${206 - offset}, 790 ${210 + offset}, 860 132`,
-  ].join(" ");
+  const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
+  const selectObject = useEditorStore((state) => state.selectObject);
+
+  const travelProject = project.kind === "travel" ? project : null;
+
+  useEffect(() => {
+    if (!containerRef.current || !travelProject) return;
+    const activeProject = travelProject;
+    setReady(false);
+    setMapError(null);
+    let disposed = false;
+    let demProtocolIds: string[] = [];
+
+    async function initializeMap() {
+      try {
+        const [maplibre, contourModule] = await Promise.all([
+          import("maplibre-gl"),
+          import("maplibre-contour"),
+        ]);
+        if (disposed || !containerRef.current) return;
+
+        maplibreRef.current = maplibre;
+        const demSource = new contourModule.default.DemSource({
+          url: TERRAIN_TILES,
+          encoding: "terrarium",
+          maxzoom: 13,
+          cacheSize: 100,
+          timeoutMs: 12_000,
+          worker: false,
+          id: "mapper-elevation",
+        });
+        demSource.setupMaplibre(maplibre);
+        demProtocolIds = [
+          demSource.sharedDemProtocolId,
+          demSource.contourProtocolId,
+        ];
+
+        const map = new maplibre.Map({
+          container: containerRef.current,
+          style: OPEN_FREE_MAP_STYLES[activeProject.map.style],
+          center: [84.63, 28.05],
+          zoom: 7.2,
+          attributionControl: false,
+          cooperativeGestures: true,
+          maxPitch: 0,
+          canvasContextAttributes: { preserveDrawingBuffer: true },
+        });
+        mapRef.current = map;
+        map.addControl(
+          new maplibre.AttributionControl({ compact: true }),
+          "bottom-right",
+        );
+
+        map.on("zoom", () => setZoom(map.getZoom()));
+        map.once("load", () => {
+          if (disposed) return;
+          try {
+            addTerrainLayers(map, demSource, activeProject);
+            addTravelLayers(map, activeProject);
+            map.fitBounds(getTripBounds(activeProject), {
+              padding: { top: 95, right: 95, bottom: 95, left: 95 },
+              duration: 0,
+              maxZoom: 10.5,
+            });
+
+            for (const layerId of ["travel-leg-solid", "travel-leg-dashed"]) {
+              map.on("click", layerId, (event) => {
+                const id = event.features?.[0]?.properties?.id;
+                if (typeof id === "string") selectObject(id);
+              });
+              map.on("mouseenter", layerId, () => {
+                map.getCanvas().style.cursor = "pointer";
+              });
+              map.on("mouseleave", layerId, () => {
+                map.getCanvas().style.cursor = "";
+              });
+            }
+            setReady(true);
+          } catch {
+            setMapError("The itinerary layers could not be added to the map.");
+          }
+        });
+
+        map.on("error", (event) => {
+          if (!map.isStyleLoaded() && event.error) {
+            setMapError("The basemap style could not be loaded. Check your connection.");
+          }
+        });
+
+      } catch {
+        setMapError("The map renderer could not be started in this browser.");
+      }
+    }
+
+    initializeMap();
+    return () => {
+      disposed = true;
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
+      mapRef.current?.remove();
+      mapRef.current = null;
+      if (maplibreRef.current) {
+        demProtocolIds.forEach((id) => maplibreRef.current?.removeProtocol(id));
+      }
+    };
+    // The map instance is intentionally created once for the active project mode.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    project.kind,
+    selectObject,
+    travelProject?.map.contourInterval,
+    travelProject?.map.elevationUnits,
+    travelProject?.map.style,
+  ]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const maplibre = maplibreRef.current;
+    if (!ready || !map || !maplibre || !travelProject) return;
+
+    const source = map.getSource("travel-legs") as GeoJSONSource | undefined;
+    source?.setData(buildTravelLegsGeoJson(travelProject, selectedObjectId));
+
+    for (const layerId of ["mapper-contour-lines", "mapper-contour-labels"]) {
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(
+          layerId,
+          "visibility",
+          travelProject.map.showContours ? "visible" : "none",
+        );
+      }
+    }
+    if (map.getLayer("mapper-hillshade")) {
+      map.setLayoutProperty(
+        "mapper-hillshade",
+        "visibility",
+        travelProject.map.showHillshade ? "visible" : "none",
+      );
+    }
+
+    markersRef.current.forEach((marker) => marker.remove());
+    const nextMarkers: Marker[] = [];
+
+    for (const stop of travelProject.stops.filter((item) => item.visible)) {
+      nextMarkers.push(
+        new maplibre.Marker({
+          element: createStopElement(
+            stop,
+            selectedObjectId === stop.id,
+            selectObject,
+          ),
+          anchor: "left",
+        })
+          .setLngLat(stop.coordinates)
+          .addTo(map),
+      );
+    }
+
+    for (const leg of travelProject.legs.filter((item) => item.visible)) {
+      const coordinates = getLegCoordinates(travelProject, leg);
+      const midpoint = coordinates[Math.floor(coordinates.length / 2)];
+      if (!midpoint) continue;
+      nextMarkers.push(
+        new maplibre.Marker({
+          element: createModeElement(
+            leg.mode,
+            leg.id,
+            selectedObjectId === leg.id,
+            selectObject,
+          ),
+          anchor: "center",
+        })
+          .setLngLat(midpoint)
+          .addTo(map),
+      );
+    }
+
+    markersRef.current = nextMarkers;
+  }, [ready, selectedObjectId, selectObject, travelProject]);
+
+  if (!travelProject) {
+    return <TrailCanvas />;
+  }
+  const activeProject = travelProject;
+
+  function fitTrip() {
+    mapRef.current?.fitBounds(getTripBounds(activeProject), {
+      padding: { top: 95, right: 95, bottom: 95, left: 95 },
+      duration: 500,
+      maxZoom: 10.5,
+    });
+  }
 
   return (
     <section
-      aria-label="Trail design canvas"
-      className="canvas-grid relative min-h-0 flex-1 overflow-hidden"
+      aria-label="Travel itinerary map"
+      data-export-root
+      className="relative min-h-0 flex-1 overflow-hidden bg-canvas"
     >
-      <svg
-        role="img"
-        aria-labelledby="canvas-title canvas-description"
-        viewBox={`${viewX} ${viewY} ${viewWidth} ${viewHeight}`}
-        className="absolute inset-0 size-full"
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <title id="canvas-title">Alder Ridge conceptual trail map</title>
-        <desc id="canvas-description">
-          Four waypoints connected by a winding ridge trail over conceptual
-          contour lines, with an alder grove southeast of the lookout.
-        </desc>
+      <div ref={containerRef} className="absolute inset-0" />
 
-        {contourLayer?.visible ? (
-          <g
-            fill="none"
-            stroke="var(--terrain)"
-            strokeWidth="1.4"
-            opacity="0.43"
-            vectorEffect="non-scaling-stroke"
-            aria-hidden="true"
-          >
-            {contours.map((path) => (
-              <path key={path} d={path} />
-            ))}
-          </g>
-        ) : null}
+      <div className="pointer-events-none absolute left-4 top-4 max-w-[calc(100%-7rem)] border-l-4 border-trail bg-popover/94 px-4 py-3 shadow-md backdrop-blur-sm">
+        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+          {travelProject.durationDays} day journey
+        </p>
+        <h2 className="truncate text-base font-extrabold tracking-tight sm:text-lg">
+          {travelProject.name}
+        </h2>
+        <p className="hidden truncate text-xs text-muted-foreground sm:block">
+          {travelProject.subtitle}
+        </p>
+      </div>
 
-        {scatterLayer?.visible ? (
-          <g fill="var(--terrain)" opacity="0.72" aria-hidden="true">
-            {trees.map(([x, y], index) => (
-              <g key={`${x}-${y}`} transform={`translate(${x} ${y})`}>
-                <path
-                  d={`M0 ${-10 - (index % 3) * 2} L-7 3 H-2 V10 H2 V3 H7 Z`}
-                />
-              </g>
-            ))}
-          </g>
-        ) : null}
+      {!ready && !mapError ? (
+        <div className="absolute inset-0 grid place-items-center bg-canvas/85">
+          <p className="border-l-2 border-water pl-3 font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground">
+            Loading open map data
+          </p>
+        </div>
+      ) : null}
 
-        {route?.visible ? (
-          <g aria-hidden="true">
-            <path
-              d={routePath}
-              fill="none"
-              stroke="color-mix(in srgb, var(--canvas) 80%, white)"
-              strokeWidth="9"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              vectorEffect="non-scaling-stroke"
-            />
-            <path
-              d={routePath}
-              fill="none"
-              stroke="var(--trail)"
-              strokeWidth="3.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              vectorEffect="non-scaling-stroke"
-            />
-          </g>
-        ) : null}
+      {mapError ? (
+        <div role="alert" className="absolute inset-x-4 top-24 border border-destructive bg-popover p-3 text-sm text-destructive shadow-md">
+          {mapError}
+        </div>
+      ) : null}
 
-        {waypointLayer?.type === "waypoints" && waypointLayer.visible
-          ? waypointLayer.points.map((point, index) => (
-              <g key={point.id} transform={`translate(${point.x} ${point.y})`}>
-                <circle
-                  r="8"
-                  fill="var(--card)"
-                  stroke="var(--trail)"
-                  strokeWidth="3"
-                  vectorEffect="non-scaling-stroke"
-                />
-                <text
-                  x="13"
-                  y={index % 2 === 0 ? 4 : -12}
-                  fill="var(--foreground)"
-                  fontSize="13"
-                  fontWeight="700"
-                  paintOrder="stroke"
-                  stroke="var(--canvas)"
-                  strokeWidth="5"
-                  strokeLinejoin="round"
-                >
-                  {point.name}
-                </text>
-              </g>
-            ))
-          : null}
-      </svg>
-
-      <div className="absolute bottom-4 right-4 flex items-center rounded-md border bg-popover/95 p-1 shadow-sm backdrop-blur-sm">
+      <div className="absolute right-4 top-4 flex items-center rounded-md border bg-popover/95 p-1 shadow-sm backdrop-blur-sm">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={zoomOut}
+              onClick={() => mapRef.current?.zoomOut()}
               aria-label="Zoom out"
             >
               <Minus aria-hidden="true" />
@@ -168,20 +529,15 @@ export function MapCanvas() {
           </TooltipTrigger>
           <TooltipContent>Zoom out</TooltipContent>
         </Tooltip>
-        <button
-          type="button"
-          onClick={resetZoom}
-          className="focus-ring min-w-14 rounded px-2 py-1 font-mono text-[11px] tabular-nums text-muted-foreground hover:bg-muted hover:text-foreground"
-          aria-label={`Reset zoom, currently ${Math.round(zoom * 100)} percent`}
-        >
-          {Math.round(zoom * 100)}%
-        </button>
+        <span className="min-w-12 px-1 text-center font-mono text-[10px] tabular-nums text-muted-foreground">
+          z{zoom.toFixed(1)}
+        </span>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={zoomIn}
+              onClick={() => mapRef.current?.zoomIn()}
               aria-label="Zoom in"
             >
               <Plus aria-hidden="true" />
@@ -195,26 +551,20 @@ export function MapCanvas() {
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={resetZoom}
-              aria-label="Fit map to view"
+              onClick={fitTrip}
+              aria-label="Fit complete journey to view"
             >
               <LocateFixed aria-hidden="true" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Fit to view</TooltipContent>
+          <TooltipContent>Fit journey</TooltipContent>
         </Tooltip>
       </div>
 
-      <div className="absolute bottom-4 left-4 hidden border-l-2 border-terrain bg-popover/90 px-3 py-2 text-[11px] shadow-sm backdrop-blur-sm sm:block">
-        <span className="block font-mono uppercase tracking-[0.12em] text-muted-foreground">
-          Concept terrain
-        </span>
-        <strong className="font-mono font-medium">20 m contours</strong>
-      </div>
-
       <p className="sr-only" aria-live="polite">
-        Canvas zoom is {Math.round(zoom * 100)} percent. Route winding is {amplitude}
-        meters.
+        {ready
+          ? `Map loaded at zoom ${zoom.toFixed(1)} with ${travelProject.stops.length} stops.`
+          : "Loading map."}
       </p>
     </section>
   );
