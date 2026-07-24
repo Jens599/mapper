@@ -281,9 +281,9 @@ function TopBar() {
           </DropdownMenuContent>
         </DropdownMenu>
         <ProjectBuilder>
-          <Button variant="ghost" size="sm" className="hidden sm:flex">
+          <Button variant="ghost" size="sm" aria-label="Open project Builder">
             <FileCode2 aria-hidden="true" />
-            Builder
+            <span className="hidden sm:inline">Builder</span>
           </Button>
         </ProjectBuilder>
         <IconLibrary>
