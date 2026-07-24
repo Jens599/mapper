@@ -16,14 +16,16 @@ function symbolicScatterPosition(
 ) {
   const projected = geographicToSymbolic(project, coordinates);
   if (scatter.region.type === "around-stop") {
-    const stop = project.stops.find((item) => item.id === scatter.region.stopId);
-    const position = positions.get(scatter.region.stopId);
+    const region = scatter.region;
+    const stop = project.stops.find((item) => item.id === region.stopId);
+    const position = positions.get(region.stopId);
     if (!stop || !position) return projected;
     const original = geographicToSymbolic(project, stop.coordinates);
     return { x: position.x + projected.x - original.x, y: position.y + projected.y - original.y };
   }
   if (scatter.region.type === "along-leg") {
-    const leg = project.legs.find((item) => item.id === scatter.region.legId);
+    const region = scatter.region;
+    const leg = project.legs.find((item) => item.id === region.legId);
     if (!leg) return projected;
     const start = positions.get(leg.from);
     const end = positions.get(leg.to);
