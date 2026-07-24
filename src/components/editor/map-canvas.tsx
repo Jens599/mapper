@@ -541,7 +541,7 @@ export function MapCanvas() {
       data-export-root
       className="relative min-h-0 flex-1 overflow-hidden bg-canvas"
     >
-      <div ref={containerRef} className="absolute inset-0" />
+      <div ref={containerRef} className="mapper-map" />
 
       <div className="pointer-events-none absolute left-4 top-4 max-w-[calc(100%-7rem)] border-l-4 border-trail bg-popover/94 px-4 py-3 shadow-md backdrop-blur-sm">
         <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">

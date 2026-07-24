@@ -165,6 +165,13 @@
     white-space: nowrap;
   }
 
+  .mapper-map {
+    position: absolute !important;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
   .mapper-stop:focus-visible,
   .mapper-mode:focus-visible {
     outline: 3px solid var(--ring);
