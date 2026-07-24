@@ -8,6 +8,7 @@ export const sampleProject = parseProject({
   durationDays: 10,
   subtitle: "Kathmandu, Pokhara and the Annapurna foothills",
   map: {
+    display: "geographic",
     style: "positron",
     showContours: true,
     showHillshade: true,

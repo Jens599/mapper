@@ -1,17 +1,21 @@
 "use client";
 
 import { LocateFixed, Minus, Plus } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { getIconSvg } from "@/lib/builtin-icons";
+import { generateTrailScatter } from "@/lib/scatter";
 import { generateConceptContours, generateTrailRoute } from "@/lib/trail-geometry";
 import { useEditorStore } from "@/store/editor-store";
 
 export function TrailCanvas() {
   const project = useEditorStore((state) => state.project);
   const selectObject = useEditorStore((state) => state.selectObject);
+  const moveTrailObject = useEditorStore((state) => state.moveTrailObject);
   const [zoom, setZoom] = useState(1);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
 
   if (project.kind !== "trail") return null;
 
@@ -22,6 +26,17 @@ export function TrailCanvas() {
   const contourPaths = project.terrain.visible
     ? generateConceptContours(project)
     : [];
+  const { lineScale, textScale, symbolScale } = project.presentation;
+
+  function pointerPosition(event: React.PointerEvent<SVGSVGElement>) {
+    const svg = svgRef.current;
+    const matrix = svg?.getScreenCTM();
+    if (!svg || !matrix) return null;
+    const point = svg.createSVGPoint();
+    point.x = event.clientX;
+    point.y = event.clientY;
+    return point.matrixTransform(matrix.inverse());
+  }
 
   return (
     <section
@@ -30,11 +45,19 @@ export function TrailCanvas() {
       className="canvas-grid relative min-h-0 flex-1 overflow-hidden"
     >
       <svg
+        ref={svgRef}
         data-export-canvas
         role="img"
         aria-labelledby="trail-title trail-description"
         viewBox={`${viewX} ${viewY} ${viewWidth} ${viewHeight}`}
         className="absolute inset-0 size-full"
+        onPointerMove={(event) => {
+          if (!draggingId) return;
+          const point = pointerPosition(event);
+          if (point) moveTrailObject(draggingId, { x: point.x, y: point.y });
+        }}
+        onPointerUp={() => setDraggingId(null)}
+        onPointerCancel={() => setDraggingId(null)}
       >
         <title id="trail-title">{project.name}</title>
         <desc id="trail-description">
@@ -44,7 +67,7 @@ export function TrailCanvas() {
         <g
           fill="none"
           stroke="var(--terrain)"
-          strokeWidth="1.2"
+          strokeWidth={1.2 * lineScale}
           opacity={project.terrain.opacity}
           vectorEffect="non-scaling-stroke"
           aria-hidden="true"
@@ -65,7 +88,7 @@ export function TrailCanvas() {
                 d={path}
                 fill="none"
                 stroke="var(--card)"
-                strokeWidth="9"
+                strokeWidth={9 * lineScale}
                 strokeLinecap="round"
                 vectorEffect="non-scaling-stroke"
               />
@@ -73,7 +96,7 @@ export function TrailCanvas() {
                 d={path}
                 fill="none"
                 stroke="var(--trail)"
-                strokeWidth="3.5"
+                strokeWidth={3.5 * lineScale}
                 strokeLinecap="round"
                 vectorEffect="non-scaling-stroke"
               />
@@ -89,6 +112,11 @@ export function TrailCanvas() {
             tabIndex={0}
             aria-label={`${point.name}${point.elevation ? `, ${point.elevation} ${project.units}` : ""}`}
             onClick={() => selectObject(point.id)}
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              setDraggingId(point.id);
+              selectObject(point.id);
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 selectObject(point.id);
@@ -107,7 +135,7 @@ export function TrailCanvas() {
               x="13"
               y="4"
               fill="var(--foreground)"
-              fontSize="13"
+              fontSize={13 * textScale}
               fontWeight="700"
               paintOrder="stroke"
               stroke="var(--canvas)"
@@ -126,13 +154,36 @@ export function TrailCanvas() {
           return (
             <g
               key={icon.id}
-              transform={`translate(${icon.x} ${icon.y}) rotate(${icon.rotation}) scale(${icon.scale}) translate(-16 -16)`}
+              transform={`translate(${icon.x} ${icon.y}) rotate(${icon.rotation}) scale(${icon.scale * symbolScale}) translate(-16 -16)`}
               fill="var(--foreground)"
               aria-label={icon.iconId}
+              onPointerDown={(event) => {
+                event.currentTarget.setPointerCapture(event.pointerId);
+                setDraggingId(icon.id);
+                selectObject(icon.id);
+              }}
+              className="cursor-move"
               dangerouslySetInnerHTML={{ __html: sizedSvg }}
             />
           );
         })}
+
+        {project.scatter.filter((scatter) => scatter.visible).flatMap((scatter) =>
+          generateTrailScatter(project, scatter).map((placement) => {
+            const svg = getIconSvg(placement.iconId, project.iconAssets);
+            if (!svg) return null;
+            const sizedSvg = svg.replace("<svg", '<svg width="32" height="32"');
+            return (
+              <g
+                key={placement.id}
+                transform={`translate(${placement.x} ${placement.y}) rotate(${placement.rotation}) scale(${placement.scale * symbolScale}) translate(-16 -16)`}
+                onClick={() => selectObject(scatter.id)}
+                className="cursor-pointer"
+                dangerouslySetInnerHTML={{ __html: sizedSvg }}
+              />
+            );
+          }),
+        )}
       </svg>
 
       <div className="pointer-events-none absolute left-4 top-4 border-l-4 border-trail bg-popover/94 px-4 py-3 shadow-md backdrop-blur-sm">

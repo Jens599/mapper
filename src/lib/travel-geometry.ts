@@ -15,6 +15,24 @@ export type TravelLegProperties = {
   selected: boolean;
 };
 
+export function getSymbolicStopPositions(project: TravelProject) {
+  const positions = new Map<string, { x: number; y: number }>();
+  const count = Math.max(1, project.stops.length - 1);
+
+  project.stops.forEach((stop, index) => {
+    const progress = index / count;
+    positions.set(
+      stop.id,
+      stop.diagramPosition ?? {
+        x: 850 - progress * 700,
+        y: 505 - progress * 355 + Math.sin(index * 1.65) * 58,
+      },
+    );
+  });
+
+  return positions;
+}
+
 function curveSegment(
   start: Coordinate,
   end: Coordinate,

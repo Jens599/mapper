@@ -13,6 +13,7 @@ name: Nepal journey
 durationDays: 10
 subtitle: Kathmandu and the Annapurna foothills
 map:
+  display: geographic
   style: positron
   showContours: true
   showHillshade: true
@@ -40,10 +41,38 @@ legs:
     visible: true
 iconAssets: []
 symbols: []
+scatter:
+  - id: mountain-band
+    name: Mountains along the top
+    iconId: carbon-mountain
+    seed: 42
+    count: 24
+    minSpacingKm: 8
+    region:
+      type: map-edge
+      edge: north
+      band: 0.18
+      padding: 0.05
+    appearance:
+      scale: [0.7, 1.3]
+      rotation: [-8, 8]
+    visible: true
 ```
 
 Coordinates are `[longitude, latitude]`. Every leg endpoint must reference an
 existing stop, and a leg cannot connect a stop to itself.
+
+Set `map.display` to `symbolic` to keep itinerary stops, transport modes, day
+labels, and route styling while replacing geographic placement with an
+automatically spaced, not-to-scale diagram. Geographic coordinates remain in the
+project so switching back does not lose data.
+
+Each item under `scatter` is one reproducible rule, regardless of generated icon
+count. Change `seed` to create another arrangement. Travel regions include
+`trip-bounds`, `map-edge`, `around-stop`, `along-leg`, and explicit `bounds`.
+Trail projects provide `canvas`, `canvas-edge`, `around-waypoint`, `along-route`,
+and `rectangle` regions. Minimum spacing uses rejection sampling, and generated
+icons avoid named stops or waypoints.
 
 ## Trail project
 

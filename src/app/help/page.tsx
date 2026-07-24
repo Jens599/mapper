@@ -3,7 +3,7 @@ import Link from "next/link";
 const sections = [
   {
     title: "Travel maps",
-    body: "Use geographic stops and travel legs to build an itinerary over the OpenFreeMap basemap. Solid lines work well for road and rail travel; dashed curves distinguish flights and walking transfers.",
+    body: "Use geographic stops and travel legs over OpenFreeMap, or choose Symbolic travel for an automatically arranged, not-to-scale itinerary with no basemap. Solid lines work well for road and rail travel; dashed curves distinguish flights and walking transfers.",
   },
   {
     title: "Trail sketches",
@@ -19,7 +19,7 @@ const sections = [
   },
   {
     title: "Symbols",
-    body: "Choose an Apache-2.0 Carbon symbol or import one or more SVG files. Place it at the project center, scatter twenty seeded copies, then adjust scale and rotation from the object rail.",
+    body: "Choose an Apache-2.0 Carbon symbol or import SVG files. Place individual draggable symbols or create one seeded scatter rule limited to a project edge, explicit region, selected stop, travel leg, waypoint, or trail route. Separate line, text, and symbol scales tune hierarchy without changing project geometry.",
   },
   {
     title: "Exports",

@@ -25,7 +25,17 @@ export const stopSchema = z.object({
     "viewpoint",
   ]),
   elevation: z.number().finite().optional(),
+  labelOffset: z.tuple([z.number().min(-300).max(300), z.number().min(-300).max(300)]).default([0, 0]),
+  diagramPosition: z
+    .object({ x: z.number().finite(), y: z.number().finite() })
+    .optional(),
   visible: z.boolean().default(true),
+});
+
+const presentationSchema = z.object({
+  lineScale: z.number().min(0.25).max(4),
+  textScale: z.number().min(0.5).max(3),
+  symbolScale: z.number().min(0.25).max(4),
 });
 
 export const legStyleSchema = z.object({
@@ -58,6 +68,98 @@ export const travelSymbolSchema = z.object({
   coordinates: coordinateSchema,
   scale: z.number().min(0.1).max(10),
   rotation: z.number().min(-360).max(360),
+  diagramPosition: z
+    .object({ x: z.number().finite(), y: z.number().finite() })
+    .optional(),
+  visible: z.boolean().default(true),
+});
+
+const scatterAppearanceSchema = z.object({
+  scale: z.tuple([z.number().min(0.1).max(10), z.number().min(0.1).max(10)]),
+  rotation: z.tuple([z.number().min(-360).max(360), z.number().min(-360).max(360)]),
+});
+
+const travelScatterRegionSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("trip-bounds"),
+    padding: z.number().min(0).max(1).default(0.08),
+  }),
+  z.object({
+    type: z.literal("around-stop"),
+    stopId: idSchema,
+    radiusKm: z.number().positive().max(2_000),
+  }),
+  z.object({
+    type: z.literal("along-leg"),
+    legId: idSchema,
+    corridorKm: z.number().positive().max(500),
+  }),
+  z.object({
+    type: z.literal("bounds"),
+    west: z.number().min(-180).max(180),
+    south: z.number().min(-90).max(90),
+    east: z.number().min(-180).max(180),
+    north: z.number().min(-90).max(90),
+  }),
+  z.object({
+    type: z.literal("map-edge"),
+    edge: z.enum(["north", "south", "east", "west"]),
+    band: z.number().min(0.02).max(0.5).default(0.18),
+    padding: z.number().min(0).max(0.4).default(0.05),
+  }),
+]);
+
+export const travelScatterSchema = z.object({
+  id: idSchema,
+  name: z.string().trim().min(1).max(100),
+  iconId: idSchema,
+  seed: z.number().int().min(0).max(2_147_483_647),
+  count: z.number().int().min(1).max(2_000),
+  minSpacingKm: z.number().min(0).max(500).default(0),
+  region: travelScatterRegionSchema,
+  appearance: scatterAppearanceSchema,
+  visible: z.boolean().default(true),
+});
+
+const trailScatterRegionSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("canvas"),
+    padding: z.number().min(0).max(500).default(20),
+  }),
+  z.object({
+    type: z.literal("around-waypoint"),
+    waypointId: idSchema,
+    radius: z.number().positive(),
+  }),
+  z.object({
+    type: z.literal("along-route"),
+    routeId: idSchema,
+    corridor: z.number().positive(),
+  }),
+  z.object({
+    type: z.literal("rectangle"),
+    x: z.number().finite(),
+    y: z.number().finite(),
+    width: z.number().positive(),
+    height: z.number().positive(),
+  }),
+  z.object({
+    type: z.literal("canvas-edge"),
+    edge: z.enum(["top", "bottom", "left", "right"]),
+    band: z.number().min(0.02).max(0.5).default(0.18),
+    padding: z.number().min(0).max(500).default(20),
+  }),
+]);
+
+export const trailScatterSchema = z.object({
+  id: idSchema,
+  name: z.string().trim().min(1).max(100),
+  iconId: idSchema,
+  seed: z.number().int().min(0).max(2_147_483_647),
+  count: z.number().int().min(1).max(2_000),
+  minSpacing: z.number().min(0).max(1_000).default(0),
+  region: trailScatterRegionSchema,
+  appearance: scatterAppearanceSchema,
   visible: z.boolean().default(true),
 });
 
@@ -100,7 +202,13 @@ const travelProjectSchema = z.object({
     name: z.string().trim().min(1).max(120),
     durationDays: z.number().int().positive().max(9_999),
     subtitle: z.string().trim().max(160).default(""),
+    presentation: presentationSchema.default({
+      lineScale: 1,
+      textScale: 1,
+      symbolScale: 1,
+    }),
     map: z.object({
+      display: z.enum(["geographic", "symbolic"]).default("geographic"),
       style: z.enum(["positron", "liberty", "bright"]),
       showContours: z.boolean(),
       showHillshade: z.boolean(),
@@ -111,6 +219,7 @@ const travelProjectSchema = z.object({
     legs: z.array(travelLegSchema),
     iconAssets: z.array(iconAssetSchema).default([]),
     symbols: z.array(travelSymbolSchema).default([]),
+    scatter: z.array(travelScatterSchema).default([]),
   });
 
 const trailProjectSchema = z.object({
@@ -119,6 +228,11 @@ const trailProjectSchema = z.object({
   id: idSchema,
   name: z.string().trim().min(1).max(120),
   units: z.enum(["m", "ft", "abstract"]),
+  presentation: presentationSchema.default({
+    lineScale: 1,
+    textScale: 1,
+    symbolScale: 1,
+  }),
   canvas: z.object({
     width: z.number().positive().max(100_000),
     height: z.number().positive().max(100_000),
@@ -145,6 +259,7 @@ const trailProjectSchema = z.object({
     }),
   ),
   iconAssets: z.array(iconAssetSchema).default([]),
+  scatter: z.array(trailScatterSchema).default([]),
 });
 
 export const projectSchema = z
@@ -154,8 +269,8 @@ export const projectSchema = z
 
     const objects =
       project.kind === "travel"
-        ? [...project.stops, ...project.legs, ...project.symbols]
-        : [...project.waypoints, ...project.routes, ...project.icons];
+        ? [...project.stops, ...project.legs, ...project.symbols, ...project.scatter]
+        : [...project.waypoints, ...project.routes, ...project.icons, ...project.scatter];
 
     for (const object of objects) {
       if (objectIds.has(object.id)) {
@@ -170,6 +285,7 @@ export const projectSchema = z
 
     if (project.kind === "trail") {
       const waypointIds = new Set(project.waypoints.map((point) => point.id));
+      const routeIds = new Set(project.routes.map((route) => route.id));
       for (const route of project.routes) {
         if (new Set(route.waypointIds).size < 2) {
           context.addIssue({
@@ -184,6 +300,28 @@ export const projectSchema = z
             code: "custom",
             message: `Trail route '${route.id}' references missing waypoint '${missing}'`,
             path: ["routes"],
+          });
+        }
+      }
+      for (const scatter of project.scatter) {
+        if (
+          scatter.region.type === "around-waypoint" &&
+          !waypointIds.has(scatter.region.waypointId)
+        ) {
+          context.addIssue({
+            code: "custom",
+            message: `Scatter '${scatter.id}' references a missing waypoint`,
+            path: ["scatter"],
+          });
+        }
+        if (
+          scatter.region.type === "along-route" &&
+          !routeIds.has(scatter.region.routeId)
+        ) {
+          context.addIssue({
+            code: "custom",
+            message: `Scatter '${scatter.id}' references a missing route`,
+            path: ["scatter"],
           });
         }
       }
@@ -210,6 +348,40 @@ export const projectSchema = z
         });
       }
     }
+    const legIds = new Set(project.legs.map((leg) => leg.id));
+    for (const scatter of project.scatter) {
+      if (
+        scatter.region.type === "around-stop" &&
+        !stopIds.has(scatter.region.stopId)
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: `Scatter '${scatter.id}' references a missing stop`,
+          path: ["scatter"],
+        });
+      }
+      if (
+        scatter.region.type === "along-leg" &&
+        !legIds.has(scatter.region.legId)
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: `Scatter '${scatter.id}' references a missing travel leg`,
+          path: ["scatter"],
+        });
+      }
+      if (
+        scatter.region.type === "bounds" &&
+        (scatter.region.west >= scatter.region.east ||
+          scatter.region.south >= scatter.region.north)
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: `Scatter '${scatter.id}' has invalid bounds`,
+          path: ["scatter"],
+        });
+      }
+    }
   });
 
 export type MapperProject = z.infer<typeof projectSchema>;
@@ -222,6 +394,9 @@ export type Coordinate = z.infer<typeof coordinateSchema>;
 export type TrailNoise = z.infer<typeof trailNoiseSchema>;
 export type TrailRoute = z.infer<typeof trailRouteSchema>;
 export type IconAsset = z.infer<typeof iconAssetSchema>;
+export type TravelScatter = z.infer<typeof travelScatterSchema>;
+export type TrailScatter = z.infer<typeof trailScatterSchema>;
+export type PresentationSettings = z.infer<typeof presentationSchema>;
 
 export function parseProject(input: unknown): MapperProject {
   return projectSchema.parse(input);

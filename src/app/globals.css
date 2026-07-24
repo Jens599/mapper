@@ -153,9 +153,10 @@
   }
 
   .mapper-stop {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
+    position: relative;
+    display: block;
+    width: 0.78rem;
+    height: 0.78rem;
     border: 0;
     background: transparent;
     color: #18221d;
@@ -179,6 +180,8 @@
   }
 
   .mapper-stop__dot {
+    position: absolute;
+    inset: 0;
     width: 0.78rem;
     height: 0.78rem;
     flex: none;
@@ -189,6 +192,8 @@
   }
 
   .mapper-stop__label {
+    position: absolute;
+    z-index: 1;
     display: grid;
     justify-items: start;
     line-height: 1;
@@ -199,8 +204,30 @@
       1px 1px 0 rgb(255 255 255 / 90%);
   }
 
+  .mapper-stop[data-label-position="0"] .mapper-stop__label {
+    left: 1.1rem;
+    top: -1.45rem;
+  }
+
+  .mapper-stop[data-label-position="1"] .mapper-stop__label {
+    right: 1.1rem;
+    top: -1.45rem;
+    justify-items: end;
+  }
+
+  .mapper-stop[data-label-position="2"] .mapper-stop__label {
+    left: 1.1rem;
+    top: 0.8rem;
+  }
+
+  .mapper-stop[data-label-position="3"] .mapper-stop__label {
+    right: 1.1rem;
+    top: 0.8rem;
+    justify-items: end;
+  }
+
   .mapper-stop__label strong {
-    font-size: 0.72rem;
+    font-size: calc(0.72rem * var(--mapper-text-scale, 1));
     font-weight: 800;
     letter-spacing: 0.01em;
   }
@@ -212,7 +239,7 @@
     background: var(--trail);
     color: white;
     font-family: var(--font-plex-mono), monospace;
-    font-size: 0.54rem;
+    font-size: calc(0.54rem * var(--mapper-text-scale, 1));
     font-weight: 600;
     letter-spacing: 0.04em;
     text-shadow: none;

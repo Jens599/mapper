@@ -1,10 +1,12 @@
 "use client";
 
 import DOMPurify from "dompurify";
-import { FolderOpen, MapPin, ScatterChart } from "lucide-react";
+import { FolderOpen, MapPin, RefreshCw, ScatterChart } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Sheet,
   SheetContent,
@@ -38,6 +40,16 @@ export function IconLibrary({ children }: { children: React.ReactNode }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [scatterOptions, setScatterOptions] = useState({
+    count: 20,
+    seed: 42,
+    region: "top" as "whole" | "top" | "selected",
+    minSpacing: 3,
+    scaleMin: 0.7,
+    scaleMax: 1.25,
+    rotationMin: -15,
+    rotationMax: 15,
+  });
   const icons = [...builtinIcons, ...project.iconAssets.map((asset) => ({ ...asset, pack: "Imported" as const }))];
 
   async function importFiles(files: FileList | null) {
@@ -109,19 +121,67 @@ export function IconLibrary({ children }: { children: React.ReactNode }) {
             onChange={(event) => importFiles(event.currentTarget.files)}
           />
           {status ? <p role="status" className="mt-4 text-xs text-muted-foreground">{status}</p> : null}
+          <fieldset className="mt-5 grid grid-cols-2 gap-3 border-t pt-4">
+            <legend className="px-1 text-xs font-bold">Scatter rule</legend>
+            <div className="grid gap-1">
+              <Label htmlFor="scatter-region">Region</Label>
+              <select
+                id="scatter-region"
+                value={scatterOptions.region}
+                onChange={(event) =>
+                  setScatterOptions((value) => ({
+                    ...value,
+                    region: event.currentTarget.value as typeof value.region,
+                  }))
+                }
+                className="focus-ring h-8 rounded-md border bg-background px-2 text-sm"
+              >
+                <option value="top">Top edge</option>
+                <option value="whole">Whole region</option>
+                <option value="selected">Around selection</option>
+              </select>
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="scatter-count">Count</Label>
+              <Input id="scatter-count" type="number" min={1} max={2000} value={scatterOptions.count} onChange={(event) => setScatterOptions((value) => ({ ...value, count: Math.min(2000, Math.max(1, Math.round(event.currentTarget.valueAsNumber || 1))) }))} />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="scatter-seed">Seed</Label>
+              <div className="flex gap-1">
+                <Input id="scatter-seed" type="number" min={0} max={2147483647} value={scatterOptions.seed} onChange={(event) => setScatterOptions((value) => ({ ...value, seed: Math.min(2_147_483_647, Math.max(0, Math.round(event.currentTarget.valueAsNumber || 0))) }))} />
+                <Button variant="outline" size="icon" aria-label="Randomize scatter seed" onClick={() => setScatterOptions((value) => ({ ...value, seed: crypto.getRandomValues(new Uint32Array(1))[0] % 2_147_483_648 }))}>
+                  <RefreshCw aria-hidden="true" />
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="scatter-spacing">
+                Min spacing {project.kind === "travel" ? "(km)" : `(${project.units})`}
+              </Label>
+              <Input id="scatter-spacing" type="number" min={0} max={project.kind === "travel" ? 500 : 1000} step={0.5} value={scatterOptions.minSpacing} onChange={(event) => setScatterOptions((value) => ({ ...value, minSpacing: Math.min(project.kind === "travel" ? 500 : 1000, Math.max(0, event.currentTarget.valueAsNumber || 0)) }))} />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="scatter-scale-min">Scale min</Label>
+              <Input id="scatter-scale-min" type="number" min={0.1} max={10} step={0.1} value={scatterOptions.scaleMin} onChange={(event) => setScatterOptions((value) => ({ ...value, scaleMin: Math.min(10, Math.max(0.1, event.currentTarget.valueAsNumber || 0.1)) }))} />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="scatter-scale-max">Scale max</Label>
+              <Input id="scatter-scale-max" type="number" min={0.1} max={10} step={0.1} value={scatterOptions.scaleMax} onChange={(event) => setScatterOptions((value) => ({ ...value, scaleMax: Math.min(10, Math.max(0.1, event.currentTarget.valueAsNumber || 0.1)) }))} />
+            </div>
+          </fieldset>
         </div>
-        <SheetFooter className="grid grid-cols-2 gap-2 border-t p-3 sm:grid-cols-4">
-          <Button variant="outline" onClick={() => inputRef.current?.click()}>
+        <SheetFooter className="grid shrink-0 grid-cols-1 gap-2 border-t bg-popover p-3 min-[420px]:grid-cols-2">
+          <Button className="w-full justify-start" variant="outline" onClick={() => inputRef.current?.click()}>
             <FolderOpen aria-hidden="true" /> Import SVGs
           </Button>
-          <Button variant="outline" onClick={() => folderInputRef.current?.click()}>
+          <Button className="w-full justify-start" variant="outline" onClick={() => folderInputRef.current?.click()}>
             <FolderOpen aria-hidden="true" /> Import folder
           </Button>
-          <Button variant="outline" onClick={placeSelectedIcon}>
+          <Button className="w-full justify-start" variant="outline" onClick={placeSelectedIcon}>
             <MapPin aria-hidden="true" /> Place center
           </Button>
-          <Button onClick={() => scatterSelectedIcon(20)}>
-            <ScatterChart aria-hidden="true" /> Scatter 20
+          <Button className="w-full justify-start" onClick={() => scatterSelectedIcon(scatterOptions)}>
+            <ScatterChart aria-hidden="true" /> Create scatter
           </Button>
         </SheetFooter>
       </SheetContent>

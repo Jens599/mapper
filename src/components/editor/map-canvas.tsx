@@ -11,6 +11,7 @@ import type {
 
 import { Button } from "@/components/ui/button";
 import { TrailCanvas } from "@/components/editor/trail-canvas";
+import { SymbolicTravelCanvas } from "@/components/editor/symbolic-travel-canvas";
 import { getIconSvg } from "@/lib/builtin-icons";
 import {
   Tooltip,
@@ -18,6 +19,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { TravelProject } from "@/lib/project-schema";
+import { generateTravelScatter } from "@/lib/scatter";
 import {
   buildTravelLegsGeoJson,
   getLegCoordinates,
@@ -61,8 +63,8 @@ function addTravelLayers(map: MapLibreMap, project: TravelProject) {
   const widthExpression: ExpressionSpecification = [
     "case",
     ["boolean", ["get", "selected"], false],
-    4.5,
-    2.7,
+    4.5 * project.presentation.lineScale,
+    2.7 * project.presentation.lineScale,
   ];
 
   map.addLayer({
@@ -71,7 +73,12 @@ function addTravelLayers(map: MapLibreMap, project: TravelProject) {
     source: "travel-legs",
     paint: {
       "line-color": "rgba(255,255,255,0.9)",
-      "line-width": ["case", ["boolean", ["get", "selected"], false], 9, 7],
+      "line-width": [
+        "case",
+        ["boolean", ["get", "selected"], false],
+        9 * project.presentation.lineScale,
+        7 * project.presentation.lineScale,
+      ],
       "line-opacity": 0.88,
     },
     layout: {
@@ -120,7 +127,7 @@ function addTravelLayers(map: MapLibreMap, project: TravelProject) {
       "symbol-spacing": 92,
       "text-field": ">",
       "text-font": ["Noto Sans Regular"],
-      "text-size": 19,
+      "text-size": 19 * project.presentation.textScale,
       "text-keep-upright": false,
       "text-rotation-alignment": "map",
       "text-allow-overlap": true,
@@ -247,11 +254,17 @@ function addTerrainLayers(
 function createStopElement(
   stop: TravelProject["stops"][number],
   selected: boolean,
+  labelPosition: number,
+  textScale: number,
   selectObject: (id: string) => void,
 ) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = `mapper-stop${selected ? " is-selected" : ""}`;
+  button.dataset.labelPosition = String(labelPosition % 4);
+  button.dataset.labelOffsetX = String(stop.labelOffset[0]);
+  button.dataset.labelOffsetY = String(stop.labelOffset[1]);
+  button.style.setProperty("--mapper-text-scale", String(textScale));
   button.setAttribute(
     "aria-label",
     `${stop.name}, ${stop.dayLabel}${stop.elevation ? `, ${stop.elevation} meters` : ""}`,
@@ -264,6 +277,7 @@ function createStopElement(
 
   const label = document.createElement("span");
   label.className = "mapper-stop__label";
+  label.style.translate = `${stop.labelOffset[0]}px ${stop.labelOffset[1]}px`;
 
   const name = document.createElement("strong");
   name.textContent = stop.name;
@@ -276,15 +290,59 @@ function createStopElement(
   return button;
 }
 
+function resolveLabelOverlaps(elements: HTMLButtonElement[], container: HTMLElement) {
+  const occupied: DOMRect[] = [];
+  const bounds = container.getBoundingClientRect();
+
+  for (const [index, element] of elements.entries()) {
+    const label = element.querySelector<HTMLElement>(".mapper-stop__label");
+    if (!label) continue;
+    label.style.visibility = "visible";
+    const baseX = Number(element.dataset.labelOffsetX ?? 0);
+    const baseY = Number(element.dataset.labelOffsetY ?? 0);
+    let placed = false;
+
+    for (const verticalShift of [0, -42, 42, -84, 84]) {
+      for (let candidate = 0; candidate < 4; candidate += 1) {
+        element.dataset.labelPosition = String((index + candidate) % 4);
+        label.style.translate = `${baseX}px ${baseY + verticalShift}px`;
+        const rect = label.getBoundingClientRect();
+        const inside =
+          rect.left >= bounds.left + 4 &&
+          rect.right <= bounds.right - 4 &&
+          rect.top >= bounds.top + 4 &&
+          rect.bottom <= bounds.bottom - 4;
+        const overlaps = occupied.some(
+          (other) =>
+            rect.left < other.right + 5 &&
+            rect.right > other.left - 5 &&
+            rect.top < other.bottom + 5 &&
+            rect.bottom > other.top - 5,
+        );
+        if (inside && !overlaps) {
+          occupied.push(rect);
+          placed = true;
+          break;
+        }
+      }
+      if (placed) break;
+    }
+
+    if (!placed) label.style.visibility = "hidden";
+  }
+}
+
 function createModeElement(
   mode: TravelProject["legs"][number]["mode"],
   legId: string,
   selected: boolean,
+  textScale: number,
   selectObject: (id: string) => void,
 ) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = `mapper-mode${selected ? " is-selected" : ""}`;
+  button.style.fontSize = `${0.48 * textScale}rem`;
   button.textContent = mode;
   button.setAttribute("aria-label", `Select ${mode} travel leg`);
   button.addEventListener("click", () => selectObject(legId));
@@ -299,12 +357,13 @@ function createSymbolElement(
   selected: boolean,
   selectObject: (id: string) => void,
   objectId: string,
+  globalScale: number,
 ) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = `mapper-symbol${selected ? " is-selected" : ""}`;
-  button.style.width = `${Math.round(30 * scale)}px`;
-  button.style.height = `${Math.round(30 * scale)}px`;
+  button.style.width = `${Math.round(30 * scale * globalScale)}px`;
+  button.style.height = `${Math.round(30 * scale * globalScale)}px`;
   const graphic = document.createElement("span");
   graphic.className = "mapper-symbol__graphic";
   graphic.style.transform = `rotate(${rotation}deg)`;
@@ -326,11 +385,18 @@ export function MapCanvas() {
   const project = useEditorStore((state) => state.project);
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
   const selectObject = useEditorStore((state) => state.selectObject);
+  const moveTravelStop = useEditorStore((state) => state.moveTravelStop);
+  const moveTravelSymbol = useEditorStore((state) => state.moveTravelSymbol);
 
   const travelProject = project.kind === "travel" ? project : null;
 
   useEffect(() => {
-    if (!containerRef.current || !travelProject) return;
+    if (
+      !containerRef.current ||
+      !travelProject ||
+      travelProject.map.display !== "geographic"
+    )
+      return;
     const activeProject = travelProject;
     setReady(false);
     setMapError(null);
@@ -430,6 +496,7 @@ export function MapCanvas() {
   }, [
     project.kind,
     selectObject,
+    travelProject?.map.display,
     travelProject?.map.contourInterval,
     travelProject?.map.elevationUnits,
     travelProject?.map.style,
@@ -438,10 +505,42 @@ export function MapCanvas() {
   useEffect(() => {
     const map = mapRef.current;
     const maplibre = maplibreRef.current;
-    if (!ready || !map || !maplibre || !travelProject) return;
+    if (
+      !ready ||
+      !map ||
+      !maplibre ||
+      !travelProject ||
+      travelProject.map.display !== "geographic"
+    )
+      return;
 
     const source = map.getSource("travel-legs") as GeoJSONSource | undefined;
     source?.setData(buildTravelLegsGeoJson(travelProject, selectedObjectId));
+    const lineScale = travelProject.presentation.lineScale;
+    const lineWidth: ExpressionSpecification = [
+      "case",
+      ["boolean", ["get", "selected"], false],
+      4.5 * lineScale,
+      2.7 * lineScale,
+    ];
+    for (const layerId of ["travel-leg-solid", "travel-leg-dashed"]) {
+      if (map.getLayer(layerId)) map.setPaintProperty(layerId, "line-width", lineWidth);
+    }
+    if (map.getLayer("travel-leg-halo")) {
+      map.setPaintProperty("travel-leg-halo", "line-width", [
+        "case",
+        ["boolean", ["get", "selected"], false],
+        9 * lineScale,
+        7 * lineScale,
+      ]);
+    }
+    if (map.getLayer("travel-direction")) {
+      map.setLayoutProperty(
+        "travel-direction",
+        "text-size",
+        19 * travelProject.presentation.textScale,
+      );
+    }
 
     for (const layerId of ["mapper-contour-lines", "mapper-contour-labels"]) {
       if (map.getLayer(layerId)) {
@@ -462,20 +561,31 @@ export function MapCanvas() {
 
     markersRef.current.forEach((marker) => marker.remove());
     const nextMarkers: Marker[] = [];
+    const stopElements: HTMLButtonElement[] = [];
 
-    for (const stop of travelProject.stops.filter((item) => item.visible)) {
-      nextMarkers.push(
-        new maplibre.Marker({
-          element: createStopElement(
-            stop,
-            selectedObjectId === stop.id,
-            selectObject,
-          ),
-          anchor: "left",
-        })
-          .setLngLat(stop.coordinates)
-          .addTo(map),
+    for (const [index, stop] of travelProject.stops
+      .filter((item) => item.visible)
+      .entries()) {
+      const element = createStopElement(
+        stop,
+        selectedObjectId === stop.id,
+        index,
+        travelProject.presentation.textScale,
+        selectObject,
       );
+      stopElements.push(element);
+      const marker = new maplibre.Marker({
+          element,
+          anchor: "center",
+          draggable: true,
+        })
+        .setLngLat(stop.coordinates)
+        .addTo(map);
+      marker.on("dragend", () => {
+        const position = marker.getLngLat();
+        moveTravelStop(stop.id, [position.lng, position.lat]);
+      });
+      nextMarkers.push(marker);
     }
 
     for (const leg of travelProject.legs.filter((item) => item.visible)) {
@@ -488,6 +598,7 @@ export function MapCanvas() {
             leg.mode,
             leg.id,
             selectedObjectId === leg.id,
+            travelProject.presentation.textScale,
             selectObject,
           ),
           anchor: "center",
@@ -500,8 +611,7 @@ export function MapCanvas() {
     for (const symbol of travelProject.symbols.filter((item) => item.visible)) {
       const svg = getIconSvg(symbol.iconId, travelProject.iconAssets);
       if (!svg) continue;
-      nextMarkers.push(
-        new maplibre.Marker({
+      const marker = new maplibre.Marker({
           element: createSymbolElement(
             symbol.iconId,
             svg,
@@ -510,19 +620,61 @@ export function MapCanvas() {
             selectedObjectId === symbol.id,
             selectObject,
             symbol.id,
+            travelProject.presentation.symbolScale,
           ),
           anchor: "center",
+          draggable: true,
         })
-          .setLngLat(symbol.coordinates)
-          .addTo(map),
-      );
+        .setLngLat(symbol.coordinates)
+        .addTo(map);
+      marker.on("dragend", () => {
+        const position = marker.getLngLat();
+        moveTravelSymbol(symbol.id, [position.lng, position.lat]);
+      });
+      nextMarkers.push(marker);
     }
 
+    for (const scatter of travelProject.scatter.filter((item) => item.visible)) {
+      for (const placement of generateTravelScatter(travelProject, scatter)) {
+        const svg = getIconSvg(placement.iconId, travelProject.iconAssets);
+        if (!svg) continue;
+        nextMarkers.push(
+          new maplibre.Marker({
+            element: createSymbolElement(
+              placement.iconId,
+              svg,
+              placement.scale,
+              placement.rotation,
+              selectedObjectId === scatter.id,
+              selectObject,
+              scatter.id,
+              travelProject.presentation.symbolScale,
+            ),
+            anchor: "center",
+          })
+            .setLngLat(placement.coordinates)
+            .addTo(map),
+        );
+      }
+    }
+
+    requestAnimationFrame(() => resolveLabelOverlaps(stopElements, map.getContainer()));
+
     markersRef.current = nextMarkers;
-  }, [ready, selectedObjectId, selectObject, travelProject]);
+  }, [
+    moveTravelStop,
+    moveTravelSymbol,
+    ready,
+    selectedObjectId,
+    selectObject,
+    travelProject,
+  ]);
 
   if (!travelProject) {
     return <TrailCanvas />;
+  }
+  if (travelProject.map.display === "symbolic") {
+    return <SymbolicTravelCanvas project={travelProject} />;
   }
   const activeProject = travelProject;
 

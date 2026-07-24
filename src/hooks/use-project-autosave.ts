@@ -10,6 +10,8 @@ export function useProjectAutosave() {
   const project = useEditorStore((state) => state.project);
   const replaceProject = useEditorStore((state) => state.replaceProject);
   const restored = useRef(false);
+  const latestProject = useRef(project);
+  latestProject.current = project;
 
   useEffect(() => {
     let cancelled = false;
@@ -49,7 +51,23 @@ export function useProjectAutosave() {
     const timeout = window.setTimeout(save, 500);
     return () => {
       window.clearTimeout(timeout);
-      void save();
     };
   }, [project]);
+
+  useEffect(
+    () => () => {
+      if (!restored.current) return;
+      const current = latestProject.current;
+      void getProjectDatabase()
+        .projects.put({
+          id: `active-${current.kind}`,
+          savedAt: Date.now(),
+          project: current,
+        })
+        .catch(() => {
+          // File save/load still works when browser persistence is denied.
+        });
+    },
+    [],
+  );
 }

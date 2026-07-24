@@ -146,8 +146,15 @@ function TopBar() {
   const project = useEditorStore((state) => state.project);
   const replaceProject = useEditorStore((state) => state.replaceProject);
   const switchProjectMode = useEditorStore((state) => state.switchProjectMode);
+  const setTravelDisplay = useEditorStore((state) => state.setTravelDisplay);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const projectModeLabel =
+    project.kind === "trail"
+      ? "Trail sketch"
+      : project.map.display === "symbolic"
+        ? "Symbolic travel"
+        : "Travel map";
 
   async function openProject(file: File | undefined) {
     if (!file) return;
@@ -227,19 +234,32 @@ function TopBar() {
             <Button
               variant="outline"
               size="sm"
-              aria-label={`Switch project mode, currently ${project.kind === "travel" ? "travel map" : "trail sketch"}`}
+              aria-label={`Switch project mode, currently ${projectModeLabel}`}
             >
               {project.kind === "travel" ? <Map aria-hidden="true" /> : <Route aria-hidden="true" />}
               <span className="hidden md:inline">
-                {project.kind === "travel" ? "Travel map" : "Trail sketch"}
+                {projectModeLabel}
               </span>
               <ChevronDown aria-hidden="true" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Project mode</DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => switchProjectMode("travel")}>
+            <DropdownMenuItem
+              onSelect={() => {
+                switchProjectMode("travel");
+                setTravelDisplay("geographic");
+              }}
+            >
               <Map aria-hidden="true" /> Travel map
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                switchProjectMode("travel");
+                setTravelDisplay("symbolic");
+              }}
+            >
+              <Route aria-hidden="true" /> Symbolic travel
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => switchProjectMode("trail")}>
               <Route aria-hidden="true" /> Trail sketch

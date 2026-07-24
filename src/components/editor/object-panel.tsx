@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import type { TravelLeg, TravelStop } from "@/lib/project-schema";
+import type { TravelLeg, TravelScatter, TravelStop } from "@/lib/project-schema";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/store/editor-store";
 
@@ -114,6 +114,9 @@ function StopProperties({
   stop: TravelStop;
   idPrefix: string;
 }) {
+  const updateStopLabelOffset = useEditorStore(
+    (state) => state.updateStopLabelOffset,
+  );
   return (
     <section
       aria-labelledby={`${idPrefix}stop-properties`}
@@ -152,8 +155,29 @@ function StopProperties({
         ) : null}
       </dl>
       <p className="border-l-2 border-water pl-3 text-xs leading-5 text-muted-foreground">
-        Drag editing and place search will be added to this geographic stop.
+        Drag the stop directly on the map. Adjust its label separately when nearby
+        labels collide.
       </p>
+      <NoiseControl
+        id={`${idPrefix}label-offset-x`}
+        label="Label horizontal"
+        value={stop.labelOffset[0]}
+        min={-160}
+        max={160}
+        step={1}
+        unit="px"
+        onChange={(value) => updateStopLabelOffset(stop.id, 0, value)}
+      />
+      <NoiseControl
+        id={`${idPrefix}label-offset-y`}
+        label="Label vertical"
+        value={stop.labelOffset[1]}
+        min={-120}
+        max={120}
+        step={1}
+        unit="px"
+        onChange={(value) => updateStopLabelOffset(stop.id, 1, value)}
+      />
     </section>
   );
 }
@@ -223,6 +247,9 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
   );
   const toggleContours = useEditorStore((state) => state.toggleContours);
   const toggleHillshade = useEditorStore((state) => state.toggleHillshade);
+  const setTravelDisplay = useEditorStore((state) => state.setTravelDisplay);
+  const updatePresentation = useEditorStore((state) => state.updatePresentation);
+  const presentation = useEditorStore((state) => state.project.presentation);
 
   if (!mapSettings) return null;
 
@@ -239,13 +266,39 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
           Terrain context
         </h2>
       </div>
+      <div className="grid grid-cols-2 gap-2" role="group" aria-label="Travel presentation">
+        <Button
+          variant={mapSettings.display === "geographic" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setTravelDisplay("geographic")}
+          aria-pressed={mapSettings.display === "geographic"}
+        >
+          Geographic
+        </Button>
+        <Button
+          variant={mapSettings.display === "symbolic" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setTravelDisplay("symbolic")}
+          aria-pressed={mapSettings.display === "symbolic"}
+        >
+          Symbolic
+        </Button>
+      </div>
       <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
         Contour lines
-        <Switch checked={mapSettings.showContours} onCheckedChange={toggleContours} />
+        <Switch
+          checked={mapSettings.showContours}
+          onCheckedChange={toggleContours}
+          disabled={mapSettings.display === "symbolic"}
+        />
       </label>
       <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
         Hillshade
-        <Switch checked={mapSettings.showHillshade} onCheckedChange={toggleHillshade} />
+        <Switch
+          checked={mapSettings.showHillshade}
+          onCheckedChange={toggleHillshade}
+          disabled={mapSettings.display === "symbolic"}
+        />
       </label>
       <dl className="grid grid-cols-2 gap-2 border-t border-sidebar-border pt-4 text-xs">
         <div>
@@ -257,6 +310,41 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
           <dd className="font-mono">Mapzen DEM</dd>
         </div>
       </dl>
+      <div className="grid gap-4 border-t pt-4">
+        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+          Presentation scale
+        </p>
+        <NoiseControl id={`${idPrefix}line-scale`} label="Lines" value={presentation.lineScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("lineScale", value)} />
+        <NoiseControl id={`${idPrefix}text-scale`} label="Text" value={presentation.textScale} min={0.5} max={3} step={0.05} onChange={(value) => updatePresentation("textScale", value)} />
+        <NoiseControl id={`${idPrefix}symbol-global-scale`} label="Symbols" value={presentation.symbolScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("symbolScale", value)} />
+      </div>
+    </section>
+  );
+}
+
+function ScatterProperties({
+  scatter,
+  idPrefix,
+}: {
+  scatter: TravelScatter;
+  idPrefix: string;
+}) {
+  return (
+    <section aria-labelledby={`${idPrefix}scatter-properties`} className="grid gap-4 p-4">
+      <div>
+        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-terrain">Seeded scatter rule</p>
+        <h2 id={`${idPrefix}scatter-properties`} className="mt-1 text-sm font-bold">{scatter.name}</h2>
+      </div>
+      <dl className="grid grid-cols-2 gap-3 text-xs">
+        <div><dt className="text-muted-foreground">Count</dt><dd className="font-mono">{scatter.count}</dd></div>
+        <div><dt className="text-muted-foreground">Seed</dt><dd className="font-mono">{scatter.seed}</dd></div>
+        <div><dt className="text-muted-foreground">Region</dt><dd className="font-mono">{scatter.region.type}</dd></div>
+        <div><dt className="text-muted-foreground">Spacing</dt><dd className="font-mono">{scatter.minSpacingKm} km</dd></div>
+      </dl>
+      <p className="border-l-2 border-terrain pl-3 text-xs leading-5 text-muted-foreground">
+        One YAML object regenerates this entire group. Edit advanced region and
+        randomization values in Builder.
+      </p>
     </section>
   );
 }
@@ -325,6 +413,8 @@ function SelectedProperties({ idPrefix }: { idPrefix: string }) {
 
   const symbol = project.symbols.find((item) => item.id === selectedObjectId);
   if (symbol) return <SymbolProperties symbol={symbol} idPrefix={idPrefix} />;
+  const scatter = project.scatter.find((item) => item.id === selectedObjectId);
+  if (scatter) return <ScatterProperties scatter={scatter} idPrefix={idPrefix} />;
 
   return (
     <p className="p-4 text-sm text-muted-foreground">
@@ -408,6 +498,19 @@ export function ObjectPanel({
                 index={index + 1}
                 icon={MapPin}
                 accent="water"
+              />
+            ))}
+            {project.scatter.length ? <SectionLabel>Scatter rules</SectionLabel> : null}
+            {project.scatter.map((scatter, index) => (
+              <ObjectRow
+                key={scatter.id}
+                id={scatter.id}
+                name={scatter.name}
+                detail={`${scatter.count} · ${scatter.region.type}`}
+                visible={scatter.visible}
+                index={index + 1}
+                icon={Mountain}
+                accent="terrain"
               />
             ))}
             <SectionLabel>Map context</SectionLabel>
