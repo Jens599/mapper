@@ -42,6 +42,15 @@ function getTripBounds(project: TravelProject): [[number, number], [number, numb
   ];
 }
 
+function getTripCamera(project: TravelProject) {
+  const [[west, south], [east, north]] = getTripBounds(project);
+  const span = Math.max(east - west, (north - south) * 1.6, 0.01);
+  return {
+    center: [(west + east) / 2, (south + north) / 2] as [number, number],
+    zoom: Math.min(10.5, Math.max(2, Math.log2(360 / span) - 1.25)),
+  };
+}
+
 function addTravelLayers(map: MapLibreMap, project: TravelProject) {
   map.addSource("travel-legs", {
     type: "geojson",
@@ -108,7 +117,7 @@ function addTravelLayers(map: MapLibreMap, project: TravelProject) {
     layout: {
       "symbol-placement": "line",
       "symbol-spacing": 92,
-      "text-field": "›",
+      "text-field": ">",
       "text-size": 19,
       "text-keep-upright": false,
       "text-rotation-alignment": "map",
@@ -326,11 +335,12 @@ export function MapCanvas() {
           demSource.contourProtocolId,
         ];
 
+        const initialCamera = getTripCamera(activeProject);
         const map = new maplibre.Map({
           container: containerRef.current,
           style: OPEN_FREE_MAP_STYLES[activeProject.map.style],
-          center: [84.63, 28.05],
-          zoom: 7.2,
+          center: initialCamera.center,
+          zoom: initialCamera.zoom,
           attributionControl: false,
           cooperativeGestures: true,
           maxPitch: 0,
@@ -348,12 +358,6 @@ export function MapCanvas() {
           try {
             addTerrainLayers(map, demSource, activeProject);
             addTravelLayers(map, activeProject);
-            map.fitBounds(getTripBounds(activeProject), {
-              padding: { top: 95, right: 95, bottom: 95, left: 95 },
-              duration: 0,
-              maxZoom: 10.5,
-            });
-
             for (const layerId of ["travel-leg-solid", "travel-leg-dashed"]) {
               map.on("click", layerId, (event) => {
                 const id = event.features?.[0]?.properties?.id;
@@ -475,10 +479,11 @@ export function MapCanvas() {
   const activeProject = travelProject;
 
   function fitTrip() {
-    mapRef.current?.fitBounds(getTripBounds(activeProject), {
-      padding: { top: 95, right: 95, bottom: 95, left: 95 },
+    const camera = getTripCamera(activeProject);
+    mapRef.current?.easeTo({
+      center: camera.center,
+      zoom: camera.zoom,
       duration: 500,
-      maxZoom: 10.5,
     });
   }
 
