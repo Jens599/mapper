@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mapper
 
-## Getting Started
+Mapper is a browser-based editor for sketching conceptual trails, terrain,
+contours, and landmarks. Routes will follow ordered waypoints while seeded
+Perlin noise controls how gently or dramatically they wind.
 
-First, run the development server:
+The application runs entirely in the browser. It has no Python service,
+database, or required server runtime and can be deployed as a static Next.js
+site.
+
+## Current status
+
+Phase 1 establishes the accessible editor shell, customized shadcn/ui theme,
+responsive project rail, versioned project model, sample project, and test
+foundation. Route generation, terrain generation, icon placement, YAML editing,
+and export are planned in subsequent phases.
+
+See [PLAN.md](./PLAN.md) for the complete roadmap.
+
+## Requirements
+
+- [Bun](https://bun.sh/) 1.3 or newer
+- A current Chromium, Firefox, or Safari browser
+
+## Development
+
+Install dependencies and start Next.js:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
+bun install
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open <http://localhost:3000>.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Available checks:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+bun run typecheck
+bun run lint
+bun test
+bun run build
+```
 
-## Learn More
+## Architecture
 
-To learn more about Next.js, take a look at the following resources:
+- Next.js App Router and strict TypeScript
+- Customized shadcn/ui components backed by Radix UI
+- Tailwind CSS 4 design tokens
+- Zustand and Immer editor state
+- Zod project validation
+- Static export through `output: "export"`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+See [docs/architecture.md](./docs/architecture.md) for boundaries and design
+decisions.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Documentation
 
-## Deploy on Vercel
+- [Getting started](./docs/getting-started.md)
+- [Architecture](./docs/architecture.md)
+- [Export contract](./docs/export.md)
+- [Implementation plan](./PLAN.md)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deployment
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`bun run build` creates a static site in `out/`. The same project can deploy to
+Vercel, a Hugging Face Static Space, GitHub Pages, or any static web host.
+
+## License
+
+A project license has not been selected yet. Bundled third-party icons will keep
+their upstream Apache-2.0 notices and attribution.
