@@ -167,7 +167,7 @@ function TopBar() {
     project.kind === "trail"
       ? "Trail sketch"
       : project.map.display === "symbolic"
-        ? "Symbolic travel"
+        ? "No map"
         : "Travel map";
 
   async function openProject(file: File | undefined) {
@@ -273,7 +273,7 @@ function TopBar() {
                 setTravelDisplay("symbolic");
               }}
             >
-              <Route aria-hidden="true" /> Symbolic travel
+              <Route aria-hidden="true" /> No map
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => switchProjectMode("trail")}>
               <Route aria-hidden="true" /> Trail sketch

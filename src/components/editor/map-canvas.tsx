@@ -12,7 +12,7 @@ import type {
 import { Button } from "@/components/ui/button";
 import { TrailCanvas } from "@/components/editor/trail-canvas";
 import { SymbolicTravelCanvas } from "@/components/editor/symbolic-travel-canvas";
-import { getIconSvg } from "@/lib/builtin-icons";
+import { getIconSvg, getPointIconSvg } from "@/lib/builtin-icons";
 import {
   Tooltip,
   TooltipContent,
@@ -23,6 +23,7 @@ import { generateTravelScatter } from "@/lib/scatter";
 import {
   buildTravelLegsGeoJson,
   getLegCoordinates,
+  getWrappedLongitudeBounds,
 } from "@/lib/travel-geometry";
 import { useEditorStore } from "@/store/editor-store";
 
@@ -39,9 +40,10 @@ type MapLibreModule = typeof import("maplibre-gl");
 function getTripBounds(project: TravelProject): [[number, number], [number, number]] {
   const longitudes = project.stops.map((stop) => stop.coordinates[0]);
   const latitudes = project.stops.map((stop) => stop.coordinates[1]);
+  const [west, east] = getWrappedLongitudeBounds(longitudes);
   return [
-    [Math.min(...longitudes), Math.min(...latitudes)],
-    [Math.max(...longitudes), Math.max(...latitudes)],
+    [west, Math.min(...latitudes)],
+    [east, Math.max(...latitudes)],
   ];
 }
 
@@ -111,6 +113,22 @@ function addTravelLayers(map: MapLibreMap, project: TravelProject) {
       "line-color": ["get", "color"],
       "line-width": widthExpression,
       "line-dasharray": [2, 2.2],
+    },
+    layout: {
+      "line-cap": "round",
+      "line-join": "round",
+    },
+  });
+
+  map.addLayer({
+    id: "travel-leg-dotted",
+    type: "line",
+    source: "travel-legs",
+    filter: ["==", ["get", "line"], "dotted"],
+    paint: {
+      "line-color": ["get", "color"],
+      "line-width": widthExpression,
+      "line-dasharray": [0.2, 2.2],
     },
     layout: {
       "line-cap": "round",
@@ -256,6 +274,7 @@ function createStopElement(
   selected: boolean,
   labelPosition: number,
   textScale: number,
+  iconSvg: string | null,
   selectObject: (id: string) => void,
 ) {
   const button = document.createElement("button");
@@ -274,6 +293,7 @@ function createStopElement(
   const dot = document.createElement("span");
   dot.className = "mapper-stop__dot";
   dot.setAttribute("aria-hidden", "true");
+  if (iconSvg) dot.innerHTML = iconSvg;
 
   const label = document.createElement("span");
   label.className = "mapper-stop__label";
@@ -300,6 +320,11 @@ function resolveLabelOverlaps(elements: HTMLButtonElement[], container: HTMLElem
     label.style.visibility = "visible";
     const baseX = Number(element.dataset.labelOffsetX ?? 0);
     const baseY = Number(element.dataset.labelOffsetY ?? 0);
+    if (baseX !== 0 || baseY !== 0) {
+      label.style.translate = `${baseX}px ${baseY}px`;
+      occupied.push(label.getBoundingClientRect());
+      continue;
+    }
     let placed = false;
 
     for (const verticalShift of [0, -42, 42, -84, 84]) {
@@ -451,7 +476,7 @@ export function MapCanvas() {
           try {
             addTerrainLayers(map, demSource, activeProject);
             addTravelLayers(map, activeProject);
-            for (const layerId of ["travel-leg-solid", "travel-leg-dashed"]) {
+            for (const layerId of ["travel-leg-solid", "travel-leg-dashed", "travel-leg-dotted"]) {
               map.on("click", layerId, (event) => {
                 const id = event.features?.[0]?.properties?.id;
                 if (typeof id === "string") selectObject(id);
@@ -523,7 +548,7 @@ export function MapCanvas() {
       4.5 * lineScale,
       2.7 * lineScale,
     ];
-    for (const layerId of ["travel-leg-solid", "travel-leg-dashed"]) {
+    for (const layerId of ["travel-leg-solid", "travel-leg-dashed", "travel-leg-dotted"]) {
       if (map.getLayer(layerId)) map.setPaintProperty(layerId, "line-width", lineWidth);
     }
     if (map.getLayer("travel-leg-halo")) {
@@ -571,6 +596,7 @@ export function MapCanvas() {
         selectedObjectId === stop.id,
         index,
         travelProject.presentation.textScale,
+        getPointIconSvg(stop.icon, travelProject.iconAssets),
         selectObject,
       );
       stopElements.push(element);
@@ -679,19 +705,43 @@ export function MapCanvas() {
   const activeProject = travelProject;
 
   function fitTrip() {
-    const camera = getTripCamera(activeProject);
-    mapRef.current?.easeTo({
-      center: camera.center,
-      zoom: camera.zoom,
-      duration: 500,
-    });
+    const map = mapRef.current;
+    if (!map) return;
+    const coordinates = [
+      ...activeProject.stops.filter((stop) => stop.visible).map((stop) => stop.coordinates),
+      ...activeProject.legs
+        .filter((leg) => leg.visible)
+        .flatMap((leg) => getLegCoordinates(activeProject, leg)),
+      ...activeProject.symbols.filter((symbol) => symbol.visible).map((symbol) => symbol.coordinates),
+      ...activeProject.scatter
+        .filter((scatter) => scatter.visible)
+        .flatMap((scatter) => generateTravelScatter(activeProject, scatter))
+        .map((placement) => placement.coordinates),
+    ];
+    if (!coordinates.length) return;
+    const longitudes = coordinates.map((coordinate) => coordinate[0]);
+    const latitudes = coordinates.map((coordinate) => coordinate[1]);
+    const [west, east] = getWrappedLongitudeBounds(longitudes);
+    const bounds: [[number, number], [number, number]] = [
+      [west, Math.min(...latitudes)],
+      [east, Math.max(...latitudes)],
+    ];
+    if (bounds[0][0] === bounds[1][0] && bounds[0][1] === bounds[1][1]) {
+      map.easeTo({ center: bounds[0], zoom: 10, duration: 500 });
+      return;
+    }
+    map.fitBounds(bounds, { padding: 72, maxZoom: 12, duration: 500 });
   }
 
   return (
     <section
       aria-label="Travel itinerary map"
       data-export-root
-      className="relative min-h-0 flex-1 overflow-hidden bg-canvas"
+      className="relative min-h-0 flex-1 overflow-hidden bg-canvas outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/60"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "0") fitTrip();
+      }}
     >
       <div ref={containerRef} className="mapper-map" />
 

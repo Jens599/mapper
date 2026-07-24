@@ -4,7 +4,7 @@ import { LocateFixed, Minus, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { getIconSvg } from "@/lib/builtin-icons";
+import { getIconSvg, getPointIconSvg, sizeIconSvg } from "@/lib/builtin-icons";
 import { generateTrailScatter } from "@/lib/scatter";
 import { generateConceptContours, generateTrailRoute } from "@/lib/trail-geometry";
 import { useEditorStore } from "@/store/editor-store";
@@ -42,7 +42,13 @@ export function TrailCanvas() {
     <section
       aria-label="Conceptual trail sketch"
       data-export-root
-      className="canvas-grid relative min-h-0 flex-1 overflow-hidden"
+      className="canvas-grid relative min-h-0 flex-1 overflow-hidden outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/60"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "0") setZoom(1);
+        if (event.key === "+" || event.key === "=") setZoom((value) => Math.min(2.5, value + 0.1));
+        if (event.key === "-") setZoom((value) => Math.max(0.5, value - 0.1));
+      }}
     >
       <svg
         ref={svgRef}
@@ -104,7 +110,10 @@ export function TrailCanvas() {
           );
         })}
 
-        {project.waypoints.filter((point) => point.visible).map((point) => (
+        {project.waypoints.filter((point) => point.visible).map((point) => {
+          const pointSvg = getPointIconSvg(point.iconId, project.iconAssets);
+          const sizedPointSvg = pointSvg ? sizeIconSvg(pointSvg, { width: 20, height: 20 }) : null;
+          return (
           <g
             key={point.id}
             transform={`translate(${point.x} ${point.y})`}
@@ -125,12 +134,15 @@ export function TrailCanvas() {
             className="cursor-pointer outline-none focus-visible:[&_circle]:stroke-water"
           >
             <circle
-              r="8"
-              fill="var(--card)"
+              r="11"
+              fill="var(--trail)"
               stroke="var(--trail)"
               strokeWidth="3"
               vectorEffect="non-scaling-stroke"
             />
+            {sizedPointSvg ? (
+              <g transform="translate(-10 -10)" fill="white" color="white" dangerouslySetInnerHTML={{ __html: sizedPointSvg }} />
+            ) : null}
             <text
               x="13"
               y="4"
@@ -145,12 +157,13 @@ export function TrailCanvas() {
               {point.name}
             </text>
           </g>
-        ))}
+          );
+        })}
 
         {project.icons.filter((icon) => icon.visible).map((icon) => {
           const svg = getIconSvg(icon.iconId, project.iconAssets);
           if (!svg) return null;
-          const sizedSvg = svg.replace("<svg", '<svg width="32" height="32"');
+          const sizedSvg = sizeIconSvg(svg, { width: 32, height: 32 });
           return (
             <g
               key={icon.id}
@@ -172,7 +185,7 @@ export function TrailCanvas() {
           generateTrailScatter(project, scatter).map((placement) => {
             const svg = getIconSvg(placement.iconId, project.iconAssets);
             if (!svg) return null;
-            const sizedSvg = svg.replace("<svg", '<svg width="32" height="32"');
+            const sizedSvg = sizeIconSvg(svg, { width: 32, height: 32 });
             return (
               <g
                 key={placement.id}

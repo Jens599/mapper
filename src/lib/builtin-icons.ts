@@ -54,3 +54,39 @@ export function getIconSvg(
     null
   );
 }
+
+const legacyPointIcons: Record<string, string> = {
+  city: "carbon-hotel",
+  temple: "carbon-restaurant",
+  mountain: "carbon-mountain",
+  airport: "carbon-airport",
+  lake: "carbon-tree",
+  camp: "carbon-campsite",
+  viewpoint: "carbon-mountain",
+};
+
+export function getPointIconSvg(
+  iconId: string | undefined,
+  customIcons: Array<{ id: string; svg: string }>,
+) {
+  if (!iconId) return null;
+  return getIconSvg(legacyPointIcons[iconId] ?? iconId, customIcons);
+}
+
+export function sizeIconSvg(
+  svg: string,
+  dimensions: { width: number; height: number; x?: number; y?: number; color?: string },
+) {
+  return svg.replace(/<svg\b([^>]*)>/i, (_match, attributes: string) => {
+    const selfClosing = attributes.trimEnd().endsWith("/");
+    const cleaned = attributes
+      .replace(/\/\s*$/, "")
+      .replace(
+        /\s(?:x|y|width|height|color)=(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,
+        "",
+      );
+    const position = `${dimensions.x === undefined ? "" : ` x="${dimensions.x}"`}${dimensions.y === undefined ? "" : ` y="${dimensions.y}"`}`;
+    const color = dimensions.color ? ` color="${dimensions.color}"` : "";
+    return `<svg${cleaned}${position} width="${dimensions.width}" height="${dimensions.height}"${color}${selfClosing ? " />" : ">"}`;
+  });
+}

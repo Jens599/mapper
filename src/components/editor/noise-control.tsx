@@ -44,7 +44,9 @@ export function NoiseControl({
       setDraft(String(value));
       return;
     }
-    commitValue(nextValue);
+    const clamped = Math.min(max, Math.max(min, nextValue));
+    onChange(clamped);
+    setDraft(String(clamped));
   }
 
   return (
@@ -61,7 +63,14 @@ export function NoiseControl({
             max={max}
             step={step}
             value={draft}
-            onChange={(event) => setDraft(event.currentTarget.value)}
+            onChange={(event) => {
+              const nextDraft = event.currentTarget.value;
+              setDraft(nextDraft);
+              const nextValue = Number(nextDraft);
+              if (nextDraft.trim() !== "" && Number.isFinite(nextValue)) {
+                commitValue(nextValue);
+              }
+            }}
             onBlur={commitDraft}
             onKeyDown={(event) => {
               if (event.key === "Enter") event.currentTarget.blur();

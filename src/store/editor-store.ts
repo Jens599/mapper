@@ -52,6 +52,7 @@ type EditorState = {
   toggleContours: () => void;
   toggleHillshade: () => void;
   setTravelDisplay: (display: "geographic" | "symbolic") => void;
+  setMapStyle: (style: TravelProject["map"]["style"]) => void;
   addTravelStop: (stop: NewTravelStop) => void;
   addTravelLeg: (leg: NewTravelLeg) => void;
   updateLegStyle: <Key extends keyof LegStyle>(
@@ -59,6 +60,8 @@ type EditorState = {
     key: Key,
     value: LegStyle[Key],
   ) => void;
+  applyLegShapeToAll: (legId: string) => void;
+  updatePointIcon: (id: string, iconId: string | null) => void;
   updateTrailNoise: <Key extends keyof TrailNoise>(
     routeId: string,
     key: Key,
@@ -184,6 +187,11 @@ export const useEditorStore = create<EditorState>()(
         }
       });
     },
+    setMapStyle: (style) => {
+      set((state) => {
+        if (state.project.kind === "travel") state.project.map.style = style;
+      });
+    },
     addTravelStop: (stop) => {
       set((state) => {
         if (
@@ -201,7 +209,7 @@ export const useEditorStore = create<EditorState>()(
             ((stop.coordinates[0] + 180) % 360 + 360) % 360 - 180,
             Math.min(90, Math.max(-90, stop.coordinates[1])),
           ],
-          icon: "city",
+          icon: "carbon-hotel",
           labelOffset: [0, 0],
           visible: true,
         });
@@ -229,6 +237,11 @@ export const useEditorStore = create<EditorState>()(
             line: leg.mode === "drive" || leg.mode === "train" ? "solid" : "dashed",
             curvature: leg.mode === "flight" ? 0.24 : 0.06,
             winding: leg.mode === "walk" ? 0.3 : 0,
+            noiseSeed: 42,
+            noiseAmplitude: 0,
+            noiseScale: 2,
+            noiseOctaves: 3,
+            noiseModulation: 0,
             color: leg.mode === "flight" ? "#216b8b" : leg.mode === "walk" ? "#ad4a24" : "#202b25",
           },
           visible: true,
@@ -241,6 +254,36 @@ export const useEditorStore = create<EditorState>()(
         if (state.project.kind !== "travel") return;
         const leg = state.project.legs.find((item) => item.id === legId);
         if (leg) Object.assign(leg.style, { [key]: value });
+      });
+    },
+    applyLegShapeToAll: (legId) => {
+      set((state) => {
+        if (state.project.kind !== "travel") return;
+        const source = state.project.legs.find((leg) => leg.id === legId);
+        if (!source) return;
+        for (const leg of state.project.legs) {
+          leg.style.curvature = source.style.curvature;
+          leg.style.winding = source.style.winding;
+          leg.style.noiseSeed = source.style.noiseSeed;
+          leg.style.noiseAmplitude = source.style.noiseAmplitude;
+          leg.style.noiseScale = source.style.noiseScale;
+          leg.style.noiseOctaves = source.style.noiseOctaves;
+          leg.style.noiseModulation = source.style.noiseModulation;
+        }
+      });
+    },
+    updatePointIcon: (id, iconId) => {
+      set((state) => {
+        if (state.project.kind === "travel") {
+          const stop = state.project.stops.find((item) => item.id === id);
+          if (stop && iconId) stop.icon = iconId;
+          return;
+        }
+        const waypoint = state.project.waypoints.find((item) => item.id === id);
+        if (waypoint) {
+          if (iconId) waypoint.iconId = iconId;
+          else delete waypoint.iconId;
+        }
       });
     },
     updateTrailNoise: (routeId, key, value) => {
