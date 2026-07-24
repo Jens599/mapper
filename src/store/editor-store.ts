@@ -26,6 +26,19 @@ export type ScatterOptions = {
   rotationMax: number;
 };
 
+export type NewTravelStop = {
+  name: string;
+  dayLabel: string;
+  coordinates: [number, number];
+};
+
+export type NewTravelLeg = {
+  name: string;
+  from: string;
+  to: string;
+  mode: TravelProject["legs"][number]["mode"];
+};
+
 type EditorState = {
   project: MapperProject;
   travelProject: TravelProject;
@@ -39,6 +52,8 @@ type EditorState = {
   toggleContours: () => void;
   toggleHillshade: () => void;
   setTravelDisplay: (display: "geographic" | "symbolic") => void;
+  addTravelStop: (stop: NewTravelStop) => void;
+  addTravelLeg: (leg: NewTravelLeg) => void;
   updateLegStyle: <Key extends keyof LegStyle>(
     legId: string,
     key: Key,
@@ -62,6 +77,8 @@ type EditorState = {
     key: keyof PresentationSettings,
     value: number,
   ) => void;
+  resetPresentation: () => void;
+  resetSymbolicLayout: () => void;
   updateStopLabelOffset: (id: string, axis: 0 | 1, value: number) => void;
   moveTravelStop: (id: string, coordinates: [number, number]) => void;
   moveTravelSymbol: (id: string, coordinates: [number, number]) => void;
@@ -165,6 +182,53 @@ export const useEditorStore = create<EditorState>()(
         if (state.project.kind === "travel") {
           state.project.map.display = display;
         }
+      });
+    },
+    addTravelStop: (stop) => {
+      set((state) => {
+        if (state.project.kind !== "travel" || !stop.name.trim()) return;
+        const id = `stop-${Date.now()}`;
+        state.project.stops.push({
+          id,
+          name: stop.name.trim(),
+          dayLabel: stop.dayLabel.trim(),
+          coordinates: [
+            ((stop.coordinates[0] + 180) % 360 + 360) % 360 - 180,
+            Math.min(90, Math.max(-90, stop.coordinates[1])),
+          ],
+          icon: "city",
+          labelOffset: [0, 0],
+          visible: true,
+        });
+        state.selectedObjectId = id;
+      });
+    },
+    addTravelLeg: (leg) => {
+      set((state) => {
+        if (
+          state.project.kind !== "travel" ||
+          leg.from === leg.to ||
+          !leg.name.trim()
+        ) return;
+        const stopIds = new Set(state.project.stops.map((stop) => stop.id));
+        if (!stopIds.has(leg.from) || !stopIds.has(leg.to)) return;
+        const id = `leg-${Date.now()}`;
+        state.project.legs.push({
+          id,
+          name: leg.name.trim(),
+          from: leg.from,
+          to: leg.to,
+          mode: leg.mode,
+          via: [],
+          style: {
+            line: leg.mode === "drive" || leg.mode === "train" ? "solid" : "dashed",
+            curvature: leg.mode === "flight" ? 0.24 : 0.06,
+            winding: leg.mode === "walk" ? 0.3 : 0,
+            color: leg.mode === "flight" ? "#216b8b" : leg.mode === "walk" ? "#ad4a24" : "#202b25",
+          },
+          visible: true,
+        });
+        state.selectedObjectId = id;
       });
     },
     updateLegStyle: (legId, key, value) => {
@@ -304,6 +368,22 @@ export const useEditorStore = create<EditorState>()(
     updatePresentation: (key, value) => {
       set((state) => {
         state.project.presentation[key] = value;
+      });
+    },
+    resetPresentation: () => {
+      set((state) => {
+        state.project.presentation = {
+          lineScale: 1,
+          textScale: 1,
+          symbolScale: 1,
+        };
+      });
+    },
+    resetSymbolicLayout: () => {
+      set((state) => {
+        if (state.project.kind !== "travel") return;
+        for (const stop of state.project.stops) delete stop.diagramPosition;
+        for (const symbol of state.project.symbols) delete symbol.diagramPosition;
       });
     },
     updateStopLabelOffset: (id, axis, value) => {
