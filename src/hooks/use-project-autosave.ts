@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 
 import { getProjectDatabase } from "@/lib/project-database";
-import { projectSchema } from "@/lib/project-schema";
+import { parseProject } from "@/lib/project-schema";
 import { useEditorStore } from "@/store/editor-store";
 
 export function useProjectAutosave() {
@@ -20,9 +20,10 @@ export function useProjectAutosave() {
       .projects.get(`active-${initialKind}`)
       .then((saved) => {
         if (cancelled || !saved) return;
-        const result = projectSchema.safeParse(saved.project);
-        if (result.success && result.data.kind === initialKind) {
-          replaceProject(result.data);
+        const restoredProject = parseProject(saved.project);
+        if (restoredProject.kind === initialKind) {
+          restored.current = true;
+          replaceProject(restoredProject);
         }
       })
       .catch(() => {

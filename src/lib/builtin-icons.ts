@@ -70,6 +70,7 @@ export function getPointIconSvg(
   customIcons: Array<{ id: string; svg: string }>,
 ) {
   if (!iconId) return null;
+  if (customIcons.some((icon) => icon.id === iconId)) return getIconSvg(iconId, customIcons);
   return getIconSvg(legacyPointIcons[iconId] ?? iconId, customIcons);
 }
 

@@ -24,7 +24,13 @@ stops:
     name: Kathmandu
     coordinates: [85.324, 27.7172]
     dayLabel: DAY 1
-    icon: city
+    icon: carbon-hotel
+    visible: true
+  - id: pokhara
+    name: Pokhara
+    coordinates: [83.9856, 28.2096]
+    dayLabel: DAY 2
+    icon: carbon-mountain
     visible: true
 legs:
   - id: kathmandu-pokhara
@@ -37,6 +43,11 @@ legs:
       line: dashed
       curvature: 0.24
       winding: 0
+      noiseSeed: 42
+      noiseAmplitude: 0.18
+      noiseScale: 2
+      noiseOctaves: 3
+      noiseModulation: 0.25
       color: "#216b8b"
     visible: true
 iconAssets: []
@@ -62,8 +73,14 @@ scatter:
 Coordinates are `[longitude, latitude]`. Every leg endpoint must reference an
 existing stop, and a leg cannot connect a stop to itself.
 
+Leg line styles are `solid`, `dashed`, or `dotted`. Curvature, winding, and the
+seeded Perlin fields belong to each leg. The editor can copy route-shape settings
+to every leg without changing each leg's line style or color. A stop's `icon`
+references a Carbon or imported icon ID.
+
 Set `map.display` to `symbolic` to keep itinerary stops, transport modes, day
-labels, and route styling while replacing geographic placement with an
+labels, and route styling while replacing geographic placement with the editor's
+**No map** presentation: an
 automatically spaced, not-to-scale diagram. Geographic coordinates remain in the
 project so switching back does not lose data.
 
@@ -98,6 +115,12 @@ waypoints:
     x: 120
     y: 570
     elevation: 220
+    visible: true
+  - id: summit
+    name: Summit
+    x: 820
+    y: 180
+    elevation: 940
     visible: true
 routes: []
 icons: []

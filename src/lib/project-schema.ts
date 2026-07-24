@@ -395,6 +395,92 @@ export type TravelScatter = z.infer<typeof travelScatterSchema>;
 export type TrailScatter = z.infer<typeof trailScatterSchema>;
 export type PresentationSettings = z.infer<typeof presentationSchema>;
 
+const legacyStopIcons: Record<string, string> = {
+  city: "carbon-hotel",
+  temple: "carbon-restaurant",
+  mountain: "carbon-mountain",
+  airport: "carbon-airport",
+  lake: "carbon-tree",
+  camp: "carbon-campsite",
+  viewpoint: "carbon-mountain",
+};
+
+function cleanLegacyProject(input: unknown) {
+  if (!input || typeof input !== "object") return input;
+  const project = structuredClone(input) as Record<string, unknown>;
+  const removeExpandedScatter = (items: unknown[]) => {
+    const groups = new Map<string, Array<{ id: string; index: number; timestamp: number }>>();
+    for (const item of items) {
+      if (!item || typeof item !== "object") continue;
+      const record = item as Record<string, unknown>;
+      if (typeof record.id !== "string" || typeof record.iconId !== "string") continue;
+      const match = /^scatter-(\d+)-(\d+)$/.exec(record.id);
+      if (!match) continue;
+      const group = groups.get(record.iconId) ?? [];
+      group.push({ id: record.id, timestamp: Number(match[1]), index: Number(match[2]) });
+      groups.set(record.iconId, group);
+    }
+    const legacyIds = new Set<string>();
+    for (const entries of groups.values()) {
+      entries.sort((a, b) => a.timestamp - b.timestamp);
+      let batch: typeof entries = [];
+      const finishBatch = () => {
+        if (
+          batch.length >= 3 &&
+          batch.every((entry, index) => entry.index === index) &&
+          batch[batch.length - 1].timestamp - batch[0].timestamp < 60_000
+        ) {
+          batch.forEach((entry) => legacyIds.add(entry.id));
+        }
+      };
+      for (const entry of entries) {
+        if (entry.index === 0) {
+          finishBatch();
+          batch = [entry];
+        } else {
+          batch.push(entry);
+        }
+      }
+      finishBatch();
+    }
+    return items.filter((item) => {
+      if (!item || typeof item !== "object") return true;
+      return !legacyIds.has(String((item as Record<string, unknown>).id));
+    });
+  };
+
+  if (project.kind === "travel" && Array.isArray(project.symbols)) {
+    project.symbols = removeExpandedScatter(project.symbols);
+  }
+  if (project.kind === "trail" && Array.isArray(project.icons)) {
+    project.icons = removeExpandedScatter(project.icons);
+  }
+  if (project.kind === "travel" && Array.isArray(project.stops)) {
+    const customIconIds = new Set(
+      Array.isArray(project.iconAssets)
+        ? project.iconAssets.flatMap((asset) =>
+            asset && typeof asset === "object" && typeof (asset as Record<string, unknown>).id === "string"
+              ? [(asset as Record<string, unknown>).id as string]
+              : [],
+          )
+        : [],
+    );
+    project.stops = project.stops.map((stop) => {
+      if (!stop || typeof stop !== "object") return stop;
+      const nextStop = { ...(stop as Record<string, unknown>) };
+      if (
+        typeof nextStop.icon === "string" &&
+        !customIconIds.has(nextStop.icon) &&
+        legacyStopIcons[nextStop.icon]
+      ) {
+        nextStop.icon = legacyStopIcons[nextStop.icon];
+      }
+      return nextStop;
+    });
+  }
+  return project;
+}
+
 export function parseProject(input: unknown): MapperProject {
-  return projectSchema.parse(input);
+  return projectSchema.parse(cleanLegacyProject(input));
 }
