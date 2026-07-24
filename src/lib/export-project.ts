@@ -1,9 +1,9 @@
 import { toPng } from "html-to-image";
 
-import { getIconSvg } from "@/lib/builtin-icons";
+import { getIconSvg, getPointIconSvg, sizeIconSvg } from "@/lib/builtin-icons";
 import { generateTravelScatter } from "@/lib/scatter";
 import type { MapperProject, TravelProject } from "@/lib/project-schema";
-import { buildTravelLegsGeoJson } from "@/lib/travel-geometry";
+import { buildTravelLegsGeoJson, getWrappedLongitudeBounds } from "@/lib/travel-geometry";
 import { downloadBlob, safeFilename } from "@/lib/project-io";
 
 function escapeXml(value: string) {
@@ -32,25 +32,30 @@ function buildTravelOverlaySvg(project: TravelProject) {
   const scatterPlacements = project.scatter
     .filter((scatter) => scatter.visible)
     .flatMap((scatter) => generateTravelScatter(project, scatter));
+  const data = buildTravelLegsGeoJson(project, null);
   const exportedCoordinates = [
     ...project.stops.map((stop) => stop.coordinates),
+    ...data.features.flatMap((feature) => feature.geometry.coordinates),
     ...project.symbols.filter((symbol) => symbol.visible).map((symbol) => symbol.coordinates),
     ...scatterPlacements.map((placement) => placement.coordinates),
   ];
   const longitudes = exportedCoordinates.map((coordinates) => coordinates[0]);
   const latitudes = exportedCoordinates.map((coordinates) => coordinates[1]);
-  const minX = Math.min(...longitudes);
-  const maxX = Math.max(...longitudes);
+  const [minX, maxX] = getWrappedLongitudeBounds(longitudes);
   const minY = Math.min(...latitudes);
   const maxY = Math.max(...latitudes);
   const scaleX = (width - padding * 2) / Math.max(0.0001, maxX - minX);
   const scaleY = (height - padding * 2) / Math.max(0.0001, maxY - minY);
   const scale = Math.min(scaleX, scaleY);
-  const projectPoint = ([longitude, latitude]: number[]) => [
-    padding + (longitude - minX) * scale,
-    height - padding - (latitude - minY) * scale,
-  ];
-  const data = buildTravelLegsGeoJson(project, null);
+  const projectPoint = ([rawLongitude, latitude]: number[]) => {
+    let longitude = rawLongitude;
+    while (longitude < minX) longitude += 360;
+    while (longitude > minX + 360) longitude -= 360;
+    return [
+      padding + (longitude - minX) * scale,
+      height - padding - (latitude - minY) * scale,
+    ];
+  };
   const routes = data.features
     .map((feature) => {
       const path = feature.geometry.coordinates
@@ -59,7 +64,7 @@ function buildTravelOverlaySvg(project: TravelProject) {
           return `${index === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
         })
         .join(" ");
-      const dash = feature.properties.line === "dashed" ? ' stroke-dasharray="10 9"' : "";
+      const dash = feature.properties.line === "dashed" ? ' stroke-dasharray="10 9"' : feature.properties.line === "dotted" ? ' stroke-dasharray="1 7"' : "";
       return `<path d="${path}" fill="none" stroke="${feature.properties.color}" stroke-width="${4 * project.presentation.lineScale}" stroke-linecap="round"${dash}/>`;
     })
     .join("");
@@ -67,7 +72,9 @@ function buildTravelOverlaySvg(project: TravelProject) {
     .filter((stop) => stop.visible)
     .map((stop) => {
       const [x, y] = projectPoint(stop.coordinates);
-      return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)})"><circle r="7" fill="#ad4a24" stroke="#fff" stroke-width="3"/><g transform="translate(${stop.labelOffset[0]} ${stop.labelOffset[1]})"><text x="12" y="-5" font-family="sans-serif" font-size="${14 * project.presentation.textScale}" font-weight="700" fill="#18221d">${escapeXml(stop.name)}</text><text x="12" y="13" font-family="monospace" font-size="${10 * project.presentation.textScale}" font-weight="600" fill="#99401f">${escapeXml(stop.dayLabel)}</text></g></g>`;
+      const rawIconSvg = getPointIconSvg(stop.icon, project.iconAssets);
+      const iconSvg = rawIconSvg ? sizeIconSvg(rawIconSvg, { x: -9, y: -9, width: 18, height: 18, color: "white" }) : "";
+      return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)})"><circle r="11" fill="#ad4a24" stroke="#fff" stroke-width="3"/>${iconSvg}<g transform="translate(${stop.labelOffset[0]} ${stop.labelOffset[1]})"><text x="14" y="-5" font-family="sans-serif" font-size="${14 * project.presentation.textScale}" font-weight="700" fill="#18221d">${escapeXml(stop.name)}</text><text x="14" y="13" font-family="monospace" font-size="${10 * project.presentation.textScale}" font-weight="600" fill="#99401f">${escapeXml(stop.dayLabel)}</text></g></g>`;
     })
     .join("");
   const symbols = project.symbols
@@ -76,10 +83,7 @@ function buildTravelOverlaySvg(project: TravelProject) {
       const svg = getIconSvg(symbol.iconId, project.iconAssets);
       if (!svg) return "";
       const [x, y] = projectPoint(symbol.coordinates);
-      const sizedSvg = svg.replace(
-        "<svg",
-        '<svg x="-16" y="-16" width="32" height="32"',
-      );
+      const sizedSvg = sizeIconSvg(svg, { x: -16, y: -16, width: 32, height: 32 });
       return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${symbol.rotation}) scale(${symbol.scale * project.presentation.symbolScale})">${sizedSvg}</g>`;
     })
     .join("");
@@ -88,10 +92,7 @@ function buildTravelOverlaySvg(project: TravelProject) {
       const svg = getIconSvg(placement.iconId, project.iconAssets);
       if (!svg) return "";
       const [x, y] = projectPoint(placement.coordinates);
-      const sizedSvg = svg.replace(
-        "<svg",
-        '<svg x="-16" y="-16" width="32" height="32"',
-      );
+      const sizedSvg = sizeIconSvg(svg, { x: -16, y: -16, width: 32, height: 32 });
       return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${placement.rotation}) scale(${placement.scale * project.presentation.symbolScale})">${sizedSvg}</g>`;
     })
     .join("");
@@ -105,7 +106,7 @@ export function exportTransparentSvg(project: MapperProject) {
     source = buildTravelOverlaySvg(project);
   } else {
     const canvas = document.querySelector<SVGSVGElement>("[data-export-canvas]");
-    if (!canvas) throw new Error("The symbolic canvas is not ready to export.");
+    if (!canvas) throw new Error("The No map canvas is not ready to export.");
     const clone = canvas.cloneNode(true) as SVGSVGElement;
     clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
     clone.removeAttribute("class");

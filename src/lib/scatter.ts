@@ -6,7 +6,7 @@ import type {
   TravelScatter,
 } from "@/lib/project-schema";
 import { generateTrailRoute } from "@/lib/trail-geometry";
-import { getLegCoordinates } from "@/lib/travel-geometry";
+import { getLegCoordinates, getWrappedLongitudeBounds } from "@/lib/travel-geometry";
 
 export type TravelScatterPlacement = {
   id: string;
@@ -45,9 +45,10 @@ function randomRange(random: () => number, range: [number, number]) {
 function tripBounds(project: TravelProject) {
   const longitudes = project.stops.map((stop) => stop.coordinates[0]);
   const latitudes = project.stops.map((stop) => stop.coordinates[1]);
+  const [west, east] = getWrappedLongitudeBounds(longitudes);
   return {
-    west: Math.min(...longitudes),
-    east: Math.max(...longitudes),
+    west,
+    east,
     south: Math.min(...latitudes),
     north: Math.max(...latitudes),
   };
@@ -278,7 +279,10 @@ export function geographicToSymbolic(
   coordinates: Coordinate,
 ) {
   const bounds = tripBounds(project);
-  const xRatio = (coordinates[0] - bounds.west) / Math.max(0.001, bounds.east - bounds.west);
+  let longitude = coordinates[0];
+  while (longitude < bounds.west) longitude += 360;
+  while (longitude > bounds.west + 360) longitude -= 360;
+  const xRatio = (longitude - bounds.west) / Math.max(0.001, bounds.east - bounds.west);
   const yRatio = (coordinates[1] - bounds.south) / Math.max(0.001, bounds.north - bounds.south);
   return {
     x: 100 + xRatio * 800,

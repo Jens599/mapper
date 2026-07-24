@@ -15,15 +15,7 @@ export const stopSchema = z.object({
   name: z.string().trim().min(1).max(80),
   coordinates: coordinateSchema,
   dayLabel: z.string().trim().min(1).max(24),
-  icon: z.enum([
-    "city",
-    "temple",
-    "mountain",
-    "airport",
-    "lake",
-    "camp",
-    "viewpoint",
-  ]),
+  icon: idSchema,
   elevation: z.number().finite().optional(),
   labelOffset: z.tuple([z.number().min(-300).max(300), z.number().min(-300).max(300)]).default([0, 0]),
   diagramPosition: z
@@ -39,9 +31,14 @@ const presentationSchema = z.object({
 });
 
 export const legStyleSchema = z.object({
-  line: z.enum(["solid", "dashed"]),
+  line: z.enum(["solid", "dashed", "dotted"]),
   curvature: z.number().min(-1).max(1),
   winding: z.number().min(0).max(1),
+  noiseSeed: z.number().int().min(0).max(2_147_483_647).default(42),
+  noiseAmplitude: z.number().min(0).max(1).default(0),
+  noiseScale: z.number().min(0.25).max(8).default(2),
+  noiseOctaves: z.number().int().min(1).max(6).default(3),
+  noiseModulation: z.number().min(0).max(1).default(0),
   color: z.string().regex(/^#[0-9a-f]{6}$/i),
 });
 

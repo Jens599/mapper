@@ -4,10 +4,14 @@ import { ChevronDown, MapPin, Mountain, Route } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { NoiseControl } from "@/components/editor/noise-control";
+import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { builtinIcons } from "@/lib/builtin-icons";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/store/editor-store";
 
@@ -39,6 +43,8 @@ export function TrailObjectPanel({ idPrefix = "", onObjectSelected }: { idPrefix
   const updateTrailNoise = useEditorStore((state) => state.updateTrailNoise);
   const updateSymbolTransform = useEditorStore((state) => state.updateSymbolTransform);
   const updatePresentation = useEditorStore((state) => state.updatePresentation);
+  const resetPresentation = useEditorStore((state) => state.resetPresentation);
+  const updatePointIcon = useEditorStore((state) => state.updatePointIcon);
 
   if (project.kind !== "trail") return null;
   const selectedRoute = project.routes.find((route) => route.id === selectedObjectId);
@@ -236,11 +242,22 @@ export function TrailObjectPanel({ idPrefix = "", onObjectSelected }: { idPrefix
             <p className="font-mono text-xs text-muted-foreground">
               x {selectedPoint.x.toFixed(0)} · y {selectedPoint.y.toFixed(0)}
             </p>
+            <div className="grid gap-1.5">
+              <Label htmlFor={`${idPrefix}waypoint-symbol`}>Point symbol</Label>
+              <Select value={selectedPoint.iconId ?? "none"} onValueChange={(value) => value && updatePointIcon(selectedPoint.id, value === "none" ? null : value)}>
+                <SelectTrigger id={`${idPrefix}waypoint-symbol`} className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No symbol</SelectItem>
+                  {[...builtinIcons, ...project.iconAssets.map((icon) => ({ ...icon, pack: "Imported" as const }))].map((icon) => <SelectItem key={icon.id} value={icon.id}>{icon.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
           </section>
         ) : null}
         <Separator />
         <section className="grid gap-4 p-4">
           <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Presentation scale</p>
+          <Button variant="outline" size="sm" onClick={resetPresentation}>Reset scales</Button>
           <NoiseControl id={`${idPrefix}trail-line-scale`} label="Lines" value={project.presentation.lineScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("lineScale", value)} />
           <NoiseControl id={`${idPrefix}trail-text-scale`} label="Text" value={project.presentation.textScale} min={0.5} max={3} step={0.05} onChange={(value) => updatePresentation("textScale", value)} />
           <NoiseControl id={`${idPrefix}trail-symbol-scale`} label="Symbols" value={project.presentation.symbolScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("symbolScale", value)} />

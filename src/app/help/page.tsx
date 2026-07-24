@@ -3,7 +3,7 @@ import Link from "next/link";
 const sections = [
   {
     title: "Travel maps",
-    body: "Use geographic stops and travel legs over OpenFreeMap, or choose Symbolic travel for an automatically arranged, not-to-scale itinerary with no basemap. Solid lines work well for road and rail travel; dashed curves distinguish flights and walking transfers.",
+    body: "Use geographic stops and travel legs over OpenFreeMap, or choose No map for an automatically arranged, not-to-scale itinerary without a basemap. Solid lines work well for road and rail travel; dashed curves distinguish flights and walking transfers.",
   },
   {
     title: "Trail sketches",

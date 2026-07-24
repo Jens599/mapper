@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { builtinIcons } from "@/lib/builtin-icons";
 import type { TravelLeg, TravelScatter, TravelStop } from "@/lib/project-schema";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/store/editor-store";
@@ -184,6 +185,11 @@ function StopProperties({
   const updateStopLabelOffset = useEditorStore(
     (state) => state.updateStopLabelOffset,
   );
+  const updatePointIcon = useEditorStore((state) => state.updatePointIcon);
+  const project = useEditorStore((state) => state.project);
+  const iconOptions = project.kind === "travel"
+    ? [...builtinIcons, ...project.iconAssets.map((icon) => ({ ...icon, pack: "Imported" as const }))]
+    : builtinIcons;
   return (
     <section
       aria-labelledby={`${idPrefix}stop-properties`}
@@ -221,6 +227,15 @@ function StopProperties({
           </div>
         ) : null}
       </dl>
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}stop-symbol`}>Point symbol</Label>
+        <Select value={stop.icon} onValueChange={(value) => value && updatePointIcon(stop.id, value)}>
+          <SelectTrigger id={`${idPrefix}stop-symbol`} className="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {iconOptions.map((icon) => <SelectItem key={icon.id} value={icon.id}>{icon.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
       <p className="border-l-2 border-water pl-3 text-xs leading-5 text-muted-foreground">
         Drag the stop directly on the map. Adjust its label separately when nearby
         labels collide.
@@ -259,6 +274,7 @@ function LegProperties({
   stopNames: Map<string, string>;
 }) {
   const updateLegStyle = useEditorStore((state) => state.updateLegStyle);
+  const applyLegShapeToAll = useEditorStore((state) => state.applyLegShapeToAll);
 
   return (
     <section
@@ -285,6 +301,23 @@ function LegProperties({
         step={0.02}
         onChange={(value) => updateLegStyle(leg.id, "curvature", value)}
       />
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}line-style`}>Line style</Label>
+        <Select value={leg.style.line} onValueChange={(value) => value && updateLegStyle(leg.id, "line", value as TravelLeg["style"]["line"])}>
+          <SelectTrigger id={`${idPrefix}line-style`} className="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="solid">Solid</SelectItem>
+            <SelectItem value="dashed">Dashed</SelectItem>
+            <SelectItem value="dotted">Dotted</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <NoiseControl id={`${idPrefix}noise-amplitude`} label="Perlin amplitude" value={leg.style.noiseAmplitude} min={0} max={1} step={0.01} onChange={(value) => updateLegStyle(leg.id, "noiseAmplitude", value)} />
+      <NoiseControl id={`${idPrefix}noise-seed`} label="Noise seed" value={leg.style.noiseSeed} min={0} max={2_147_483_647} step={1} onChange={(value) => updateLegStyle(leg.id, "noiseSeed", Math.round(value))} />
+      <NoiseControl id={`${idPrefix}noise-scale`} label="Noise scale" value={leg.style.noiseScale} min={0.25} max={8} step={0.25} onChange={(value) => updateLegStyle(leg.id, "noiseScale", value)} />
+      <NoiseControl id={`${idPrefix}noise-octaves`} label="Noise octaves" value={leg.style.noiseOctaves} min={1} max={6} step={1} onChange={(value) => updateLegStyle(leg.id, "noiseOctaves", Math.round(value))} />
+      <NoiseControl id={`${idPrefix}noise-modulation`} label="Noise modulation" value={leg.style.noiseModulation} min={0} max={1} step={0.01} onChange={(value) => updateLegStyle(leg.id, "noiseModulation", value)} />
+      <Button variant="outline" size="sm" onClick={() => applyLegShapeToAll(leg.id)}>Apply route shape to all legs</Button>
       <NoiseControl
         id={`${idPrefix}winding`}
         label="Hand-drawn winding"
@@ -315,7 +348,9 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
   const toggleContours = useEditorStore((state) => state.toggleContours);
   const toggleHillshade = useEditorStore((state) => state.toggleHillshade);
   const setTravelDisplay = useEditorStore((state) => state.setTravelDisplay);
+  const setMapStyle = useEditorStore((state) => state.setMapStyle);
   const updatePresentation = useEditorStore((state) => state.updatePresentation);
+  const resetPresentation = useEditorStore((state) => state.resetPresentation);
   const presentation = useEditorStore((state) => state.project.presentation);
 
   if (!mapSettings) return null;
@@ -348,8 +383,24 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
           onClick={() => setTravelDisplay("symbolic")}
           aria-pressed={mapSettings.display === "symbolic"}
         >
-          Symbolic
+          No map
         </Button>
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}basemap-style`}>OpenStreetMap style</Label>
+        <Select
+          value={mapSettings.style}
+          onValueChange={(value) => value && setMapStyle(value as typeof mapSettings.style)}
+          disabled={mapSettings.display === "symbolic"}
+        >
+          <SelectTrigger id={`${idPrefix}basemap-style`} className="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="positron">Positron - quiet light</SelectItem>
+            <SelectItem value="liberty">Liberty - colorful terrain</SelectItem>
+            <SelectItem value="bright">Bright - detailed roads</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-[11px] leading-4 text-muted-foreground">OpenFreeMap rendering of OpenStreetMap data.</p>
       </div>
       <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
         Contour lines
@@ -381,6 +432,7 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
         <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
           Presentation scale
         </p>
+        <Button variant="outline" size="sm" onClick={resetPresentation}>Reset scales</Button>
         <NoiseControl id={`${idPrefix}line-scale`} label="Lines" value={presentation.lineScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("lineScale", value)} />
         <NoiseControl id={`${idPrefix}text-scale`} label="Text" value={presentation.textScale} min={0.5} max={3} step={0.05} onChange={(value) => updatePresentation("textScale", value)} />
         <NoiseControl id={`${idPrefix}symbol-global-scale`} label="Symbols" value={presentation.symbolScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("symbolScale", value)} />
