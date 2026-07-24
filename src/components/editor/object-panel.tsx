@@ -671,7 +671,7 @@ export function ObjectPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
-      <div className="flex min-h-12 shrink-0 items-center justify-between border-b border-sidebar-border px-3">
+      <div className="grid min-h-12 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center border-b border-sidebar-border pl-3 pr-1.5">
         <div className="min-w-0 py-1.5">
           <p className="truncate text-sm font-bold">{project.name}</p>
           <p className="font-mono text-[9px] uppercase tracking-[0.13em] text-muted-foreground">

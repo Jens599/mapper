@@ -2,22 +2,34 @@
 
 import { autocompletion, type CompletionContext } from "@codemirror/autocomplete";
 import { yaml } from "@codemirror/lang-yaml";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { linter } from "@codemirror/lint";
 import { EditorView } from "@codemirror/view";
-import { FileCode2 } from "lucide-react";
+import { tags } from "@lezer/highlight";
+import { Columns2, FileCode2, Maximize2, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useDeferredValue, useEffect, useState, useTransition } from "react";
+import { usePanelRef } from "react-resizable-panels";
 
 import { Button } from "@/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import { deserializeProject, serializeProject } from "@/lib/project-io";
 import { useEditorStore } from "@/store/editor-store";
 
@@ -59,6 +71,16 @@ const vscodeTheme = EditorView.theme(
   { dark: true },
 );
 
+const accessibleYamlHighlight = HighlightStyle.define([
+  { tag: [tags.propertyName, tags.attributeName], color: "#9cdcfe" },
+  { tag: [tags.string, tags.special(tags.string)], color: "#f0b7a4" },
+  { tag: [tags.number, tags.bool, tags.null], color: "#b5d6a2" },
+  { tag: [tags.keyword, tags.atom], color: "#c7a0dc" },
+  { tag: [tags.comment, tags.lineComment, tags.blockComment], color: "#86b778" },
+  { tag: [tags.punctuation, tags.separator, tags.bracket], color: "#d4d4d4" },
+  { tag: tags.invalid, color: "#ff9b9b", textDecoration: "underline" },
+]);
+
 export function ProjectBuilder({ children }: { children: React.ReactNode }) {
   const project = useEditorStore((state) => state.project);
   const replaceProject = useEditorStore((state) => state.replaceProject);
@@ -66,6 +88,9 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
   const [source, setSource] = useState(() => serializeProject(project));
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [desktop, setDesktop] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const editorPanelRef = usePanelRef();
   const deferredSource = useDeferredValue(source);
   let valid = true;
   try {
@@ -77,6 +102,24 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (open) setSource(serializeProject(project));
   }, [open, project]);
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 768px)");
+    const update = () => setDesktop(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  function showHalfScreen() {
+    setFullscreen(false);
+    requestAnimationFrame(() => editorPanelRef.current?.resize("50%"));
+  }
+
+  function showFullScreen() {
+    setFullscreen(true);
+    requestAnimationFrame(() => editorPanelRef.current?.resize("100%"));
+  }
 
   function applySource() {
     try {
@@ -91,16 +134,32 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
     }
   }
 
-  return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>{children}</SheetTrigger>
-      <SheetContent className="w-[min(92vw,42rem)] max-w-none gap-0 p-0 sm:max-w-none">
-        <SheetHeader className="border-b p-4">
-          <SheetTitle>Project builder</SheetTitle>
-          <SheetDescription>
-            Edit the versioned YAML source. Applying replaces the active project.
-          </SheetDescription>
-        </SheetHeader>
+  const workspace = (
+    <div className="flex size-full min-h-0 flex-col bg-[#1e1e1e] text-[#d4d4d4]">
+      <div className="flex min-h-14 shrink-0 items-center gap-3 border-b border-[#2b2b2b] bg-[#181818] px-4 pr-3">
+        <FileCode2 className="size-4 text-[#e8b563]" aria-hidden="true" />
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-semibold text-[#f0f0f0]">Project builder</h2>
+          <p className="truncate text-[11px] text-[#9d9d9d]">Validated Mapper YAML</p>
+        </div>
+        {desktop ? (
+          <div className="ml-auto flex items-center gap-1">
+            <Button variant="ghost" size="icon-sm" className="text-[#d4d4d4] hover:bg-[#2a2d2e] hover:text-white" onClick={showHalfScreen} aria-label="Set Builder to half screen">
+              <Columns2 aria-hidden="true" />
+            </Button>
+            <Button variant="ghost" size="icon-sm" className="text-[#d4d4d4] hover:bg-[#2a2d2e] hover:text-white" onClick={showFullScreen} aria-label="Make Builder full screen">
+              <Maximize2 aria-hidden="true" />
+            </Button>
+            <Button variant="ghost" size="icon-sm" className="text-[#d4d4d4] hover:bg-[#2a2d2e] hover:text-white" onClick={() => setOpen(false)} aria-label="Close Builder">
+              <X aria-hidden="true" />
+            </Button>
+          </div>
+        ) : (
+          <Button variant="ghost" size="icon-sm" className="ml-auto text-[#d4d4d4] hover:bg-[#2a2d2e] hover:text-white" onClick={() => setOpen(false)} aria-label="Close Builder">
+            <X aria-hidden="true" />
+          </Button>
+        )}
+      </div>
         <div className="flex h-9 shrink-0 items-end border-b border-[#2b2b2b] bg-[#181818] px-2">
           <div className="flex h-8 items-center gap-2 border-t border-[#007acc] bg-[#1e1e1e] px-3 font-mono text-[11px] text-[#d4d4d4]">
             <FileCode2 className="size-3.5 text-[#e8b563]" aria-hidden="true" />
@@ -110,10 +169,11 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
         <div className="min-h-0 flex-1 overflow-auto bg-[#1e1e1e]">
           <CodeMirror
             value={source}
-            height="calc(100dvh - 10rem)"
+            height="100%"
             theme={vscodeTheme}
             extensions={[
               yaml(),
+              syntaxHighlighting(accessibleYamlHighlight),
               autocompletion({ override: [mapperCompletionSource] }),
               linter((view) => {
                 try {
@@ -152,15 +212,56 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
           <span>{valid ? "Valid Mapper project" : "Schema errors"}</span>
           <span>YAML | UTF-8 | Spaces: 2</span>
         </div>
-        <SheetFooter className="flex-row justify-end border-t p-3">
-          <Button variant="ghost" onClick={() => setOpen(false)}>
+        <div className="flex shrink-0 justify-end gap-2 border-t border-[#2b2b2b] bg-[#181818] p-3">
+          <Button variant="ghost" className="text-[#d4d4d4] hover:bg-[#2a2d2e] hover:text-white" onClick={() => setOpen(false)}>
             Cancel
           </Button>
           <Button onClick={applySource} disabled={pending}>
             {pending ? "Applying..." : "Apply YAML"}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </div>
+    </div>
+  );
+
+  return (
+    <>
+      <span className="contents" onClick={() => {
+        setFullscreen(false);
+        setOpen(true);
+      }}>{children}</span>
+      <Dialog open={open && desktop} onOpenChange={setOpen}>
+        <DialogContent
+          showCloseButton={false}
+          className={fullscreen
+            ? "inset-0 size-full max-w-none translate-x-0 translate-y-0 rounded-none bg-transparent p-0 ring-0"
+            : "inset-x-0 bottom-0 left-0 top-12 h-auto w-full max-w-none translate-x-0 translate-y-0 rounded-none bg-transparent p-0 ring-0"}
+        >
+          <DialogTitle className="sr-only">Project builder</DialogTitle>
+          <DialogDescription className="sr-only">Edit and validate the active project YAML.</DialogDescription>
+          <ResizablePanelGroup orientation="horizontal" className="size-full">
+            <ResizablePanel defaultSize="50%" minSize="0%" className="pointer-events-none" />
+            <ResizableHandle withHandle className="pointer-events-auto bg-[#454545]" onDoubleClick={showHalfScreen} />
+            <ResizablePanel
+              panelRef={editorPanelRef}
+              defaultSize="50%"
+              minSize="30%"
+              maxSize={fullscreen ? "100%" : "80%"}
+              className="pointer-events-auto shadow-[-10px_0_30px_rgba(0,0,0,0.22)]"
+            >
+              {workspace}
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </DialogContent>
+      </Dialog>
+      <Drawer open={open && !desktop} onOpenChange={setOpen} direction="bottom">
+        <DrawerContent className="h-dvh max-h-none rounded-none border-0 p-0">
+          <DrawerHeader className="sr-only">
+            <DrawerTitle>Project builder</DrawerTitle>
+            <DrawerDescription>Edit and validate the active project YAML.</DrawerDescription>
+          </DrawerHeader>
+          {workspace}
+        </DrawerContent>
+      </Drawer>
+    </>
   );
 }
