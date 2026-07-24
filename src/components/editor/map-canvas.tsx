@@ -11,6 +11,7 @@ import type {
 
 import { Button } from "@/components/ui/button";
 import { TrailCanvas } from "@/components/editor/trail-canvas";
+import { getIconSvg } from "@/lib/builtin-icons";
 import {
   Tooltip,
   TooltipContent,
@@ -118,6 +119,7 @@ function addTravelLayers(map: MapLibreMap, project: TravelProject) {
       "symbol-placement": "line",
       "symbol-spacing": 92,
       "text-field": ">",
+      "text-font": ["Noto Sans Regular"],
       "text-size": 19,
       "text-keep-upright": false,
       "text-rotation-alignment": "map",
@@ -230,6 +232,7 @@ function addTerrainLayers(
           ["number-format", ["get", "ele"], { "max-fraction-digits": 0 }],
           project.map.elevationUnits,
         ],
+        "text-font": ["Noto Sans Regular"],
       },
       paint: {
         "text-color": "#466554",
@@ -285,6 +288,30 @@ function createModeElement(
   button.textContent = mode;
   button.setAttribute("aria-label", `Select ${mode} travel leg`);
   button.addEventListener("click", () => selectObject(legId));
+  return button;
+}
+
+function createSymbolElement(
+  iconId: string,
+  svg: string,
+  scale: number,
+  rotation: number,
+  selected: boolean,
+  selectObject: (id: string) => void,
+  objectId: string,
+) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `mapper-symbol${selected ? " is-selected" : ""}`;
+  button.style.width = `${Math.round(30 * scale)}px`;
+  button.style.height = `${Math.round(30 * scale)}px`;
+  const graphic = document.createElement("span");
+  graphic.className = "mapper-symbol__graphic";
+  graphic.style.transform = `rotate(${rotation}deg)`;
+  graphic.innerHTML = svg;
+  button.append(graphic);
+  button.setAttribute("aria-label", `Select ${iconId} symbol`);
+  button.addEventListener("click", () => selectObject(objectId));
   return button;
 }
 
@@ -466,6 +493,27 @@ export function MapCanvas() {
           anchor: "center",
         })
           .setLngLat(midpoint)
+          .addTo(map),
+      );
+    }
+
+    for (const symbol of travelProject.symbols.filter((item) => item.visible)) {
+      const svg = getIconSvg(symbol.iconId, travelProject.iconAssets);
+      if (!svg) continue;
+      nextMarkers.push(
+        new maplibre.Marker({
+          element: createSymbolElement(
+            symbol.iconId,
+            svg,
+            symbol.scale,
+            symbol.rotation,
+            selectedObjectId === symbol.id,
+            selectObject,
+            symbol.id,
+          ),
+          anchor: "center",
+        })
+          .setLngLat(symbol.coordinates)
           .addTo(map),
       );
     }

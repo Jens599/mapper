@@ -2,10 +2,17 @@
 
 ## 1. Product Definition
 
-Mapper is a browser-based conceptual trail-design editor. Users arrange named
-places on an abstract plane, connect ordered waypoints with generated paths,
-shape those paths with layered Perlin noise, add conceptual elevation and
+Mapper is a browser-based travel and trail-design editor with two first-class
+project modes. Travel maps arrange geographic stops, day labels, transport legs,
+open basemaps, real elevation contours, and landmarks. Trail sketches arrange
+named places on an abstract plane, connect ordered waypoints with generated
+paths, shape those paths with layered Perlin noise, add conceptual elevation and
 contours, place or scatter SVG symbols, and export the resulting composition.
+
+Travel mode uses MapLibre GL JS, OpenFreeMap vector tiles derived from
+OpenStreetMap, and Mapzen Terrain Tiles from the AWS Open Data Registry. Trail
+mode remains independent of network map services and works as an abstract,
+seeded composition tool.
 
 The application is a client-only Next.js app. Generation, editing, persistence,
 and export run in the browser so the production build can be deployed as a free

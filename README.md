@@ -1,8 +1,9 @@
 # Mapper
 
-Mapper is a browser-based editor for sketching conceptual trails, terrain,
-contours, and landmarks. Routes will follow ordered waypoints while seeded
-Perlin noise controls how gently or dramatically they wind.
+Mapper is a browser-based editor for geographic travel itineraries and
+conceptual trails. Travel maps combine OpenStreetMap geography, typed transport
+legs, day labels, terrain, and landmarks. Trail sketches use seeded Perlin noise
+to control how gently or dramatically paths wind through ordered waypoints.
 
 The application runs entirely in the browser. It has no Python service,
 database, or required server runtime and can be deployed as a static Next.js
@@ -10,10 +11,9 @@ site.
 
 ## Current status
 
-Phase 1 establishes the accessible editor shell, customized shadcn/ui theme,
-responsive project rail, versioned project model, sample project, and test
-foundation. Route generation, terrain generation, icon placement, YAML editing,
-and export are planned in subsequent phases.
+The editor currently includes travel and trail project modes, OpenFreeMap vector
+maps, public elevation contours, Perlin trail generation, an SVG symbol library,
+YAML editing, IndexedDB autosave, and SVG/PNG export.
 
 See [PLAN.md](./PLAN.md) for the complete roadmap.
 
@@ -59,6 +59,8 @@ decisions.
 - [Getting started](./docs/getting-started.md)
 - [Architecture](./docs/architecture.md)
 - [Export contract](./docs/export.md)
+- [Open map data](./docs/map-data.md)
+- [Project schema](./docs/project-schema.md)
 - [Implementation plan](./PLAN.md)
 
 ## Deployment
@@ -70,3 +72,6 @@ Vercel, a Hugging Face Static Space, GitHub Pages, or any static web host.
 
 A project license has not been selected yet. Bundled third-party icons will keep
 their upstream Apache-2.0 notices and attribution.
+
+See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for map, elevation,
+renderer, and icon attribution.

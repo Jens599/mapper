@@ -1,5 +1,6 @@
 import { toPng } from "html-to-image";
 
+import { getIconSvg } from "@/lib/builtin-icons";
 import type { MapperProject, TravelProject } from "@/lib/project-schema";
 import { buildTravelLegsGeoJson } from "@/lib/travel-geometry";
 import { downloadBlob, safeFilename } from "@/lib/project-io";
@@ -54,8 +55,21 @@ function buildTravelOverlaySvg(project: TravelProject) {
       return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)})"><circle r="7" fill="#ad4a24" stroke="#fff" stroke-width="3"/><text x="12" y="-5" font-family="sans-serif" font-size="14" font-weight="700" fill="#18221d">${escapeXml(stop.name)}</text><text x="12" y="13" font-family="monospace" font-size="10" font-weight="600" fill="#99401f">${escapeXml(stop.dayLabel)}</text></g>`;
     })
     .join("");
+  const symbols = project.symbols
+    .filter((symbol) => symbol.visible)
+    .map((symbol) => {
+      const svg = getIconSvg(symbol.iconId, project.iconAssets);
+      if (!svg) return "";
+      const [x, y] = projectPoint(symbol.coordinates);
+      const sizedSvg = svg.replace(
+        "<svg",
+        '<svg x="-16" y="-16" width="32" height="32"',
+      );
+      return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${symbol.rotation}) scale(${symbol.scale})">${sizedSvg}</g>`;
+    })
+    .join("");
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(project.name)} travel itinerary"><g>${routes}${stops}</g><text x="${padding}" y="40" font-family="sans-serif" font-size="24" font-weight="700" fill="#18221d">${escapeXml(project.name)}</text></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(project.name)} travel itinerary"><g>${routes}${symbols}${stops}</g><text x="${padding}" y="40" font-family="sans-serif" font-size="24" font-weight="700" fill="#18221d">${escapeXml(project.name)}</text></svg>`;
 }
 
 export function exportTransparentSvg(project: MapperProject) {
@@ -102,4 +116,38 @@ export async function exportPng(project: MapperProject) {
   });
   const response = await fetch(dataUrl);
   downloadBlob(await response.blob(), `${safeFilename(project.name)}.png`);
+}
+
+export function exportCoordinatesCsv(project: MapperProject) {
+  const quote = (value: string | number | undefined) =>
+    `"${String(value ?? "").replaceAll('"', '""')}"`;
+  const rows =
+    project.kind === "travel"
+      ? [
+          ["id", "name", "longitude", "latitude", "day", "elevation"],
+          ...project.stops.map((stop) => [
+            stop.id,
+            stop.name,
+            stop.coordinates[0],
+            stop.coordinates[1],
+            stop.dayLabel,
+            stop.elevation,
+          ]),
+        ]
+      : [
+          ["id", "name", "x", "y", "elevation", "units"],
+          ...project.waypoints.map((point) => [
+            point.id,
+            point.name,
+            point.x,
+            point.y,
+            point.elevation,
+            project.units,
+          ]),
+        ];
+  const source = rows.map((row) => row.map(quote).join(",")).join("\n");
+  downloadBlob(
+    new Blob([source], { type: "text/csv;charset=utf-8" }),
+    `${safeFilename(project.name)}-coordinates.csv`,
+  );
 }

@@ -46,7 +46,7 @@ export const sampleTrailProject = parseProject({
     },
   ],
   icons: [
-    { id: "camp-icon", iconId: "camp", x: 865, y: 105, scale: 1, rotation: 0, visible: true },
-    { id: "water-icon", iconId: "water", x: 390, y: 460, scale: 1, rotation: 0, visible: true },
+    { id: "camp-icon", iconId: "carbon-campsite", x: 865, y: 105, scale: 1, rotation: 0, visible: true },
+    { id: "mountain-icon", iconId: "carbon-mountain", x: 650, y: 205, scale: 1, rotation: 0, visible: true },
   ],
 }) as TrailProject;

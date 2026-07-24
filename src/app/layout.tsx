@@ -22,9 +22,9 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mapper | Conceptual trail designer",
+  title: "Mapper | Travel and trail designer",
   description:
-    "Sketch winding trails, conceptual terrain, contours, and landmarks.",
+    "Design geographic travel itineraries and winding conceptual trails.",
 };
 
 export default function RootLayout({

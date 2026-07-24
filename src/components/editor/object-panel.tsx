@@ -261,6 +261,45 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
   );
 }
 
+function SymbolProperties({
+  symbol,
+  idPrefix,
+}: {
+  symbol: { id: string; iconId: string; scale: number; rotation: number };
+  idPrefix: string;
+}) {
+  const updateSymbolTransform = useEditorStore(
+    (state) => state.updateSymbolTransform,
+  );
+  return (
+    <section aria-labelledby={`${idPrefix}symbol-properties`} className="grid gap-5 p-4">
+      <div>
+        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-water">Map symbol</p>
+        <h2 id={`${idPrefix}symbol-properties`} className="mt-1 text-sm font-bold">{symbol.iconId}</h2>
+      </div>
+      <NoiseControl
+        id={`${idPrefix}symbol-scale`}
+        label="Scale"
+        value={symbol.scale}
+        min={0.1}
+        max={5}
+        step={0.1}
+        onChange={(value) => updateSymbolTransform(symbol.id, "scale", value)}
+      />
+      <NoiseControl
+        id={`${idPrefix}symbol-rotation`}
+        label="Rotation"
+        value={symbol.rotation}
+        min={-180}
+        max={180}
+        step={1}
+        unit="°"
+        onChange={(value) => updateSymbolTransform(symbol.id, "rotation", value)}
+      />
+    </section>
+  );
+}
+
 function SelectedProperties({ idPrefix }: { idPrefix: string }) {
   const project = useEditorStore((state) => state.project);
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
@@ -283,6 +322,9 @@ function SelectedProperties({ idPrefix }: { idPrefix: string }) {
       />
     );
   }
+
+  const symbol = project.symbols.find((item) => item.id === selectedObjectId);
+  if (symbol) return <SymbolProperties symbol={symbol} idPrefix={idPrefix} />;
 
   return (
     <p className="p-4 text-sm text-muted-foreground">
@@ -353,6 +395,19 @@ export function ObjectPanel({
                 index={index + 1}
                 icon={modeIcons[leg.mode]}
                 accent={leg.mode === "flight" ? "water" : "trail"}
+              />
+            ))}
+            {project.symbols.length ? <SectionLabel>Symbols</SectionLabel> : null}
+            {project.symbols.map((symbol, index) => (
+              <ObjectRow
+                key={symbol.id}
+                id={symbol.id}
+                name={symbol.iconId}
+                detail={`scale ${symbol.scale.toFixed(1)}`}
+                visible={symbol.visible}
+                index={index + 1}
+                icon={MapPin}
+                accent="water"
               />
             ))}
             <SectionLabel>Map context</SectionLabel>

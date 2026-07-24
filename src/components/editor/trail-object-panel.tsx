@@ -16,10 +16,12 @@ export function TrailObjectPanel({ idPrefix = "" }: { idPrefix?: string }) {
   const toggleObjectVisibility = useEditorStore((state) => state.toggleObjectVisibility);
   const toggleContours = useEditorStore((state) => state.toggleContours);
   const updateTrailNoise = useEditorStore((state) => state.updateTrailNoise);
+  const updateSymbolTransform = useEditorStore((state) => state.updateSymbolTransform);
 
   if (project.kind !== "trail") return null;
   const selectedRoute = project.routes.find((route) => route.id === selectedObjectId);
   const selectedPoint = project.waypoints.find((point) => point.id === selectedObjectId);
+  const selectedIcon = project.icons.find((icon) => icon.id === selectedObjectId);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
@@ -110,6 +112,16 @@ export function TrailObjectPanel({ idPrefix = "" }: { idPrefix?: string }) {
                 className="scale-75"
               />
             </li>
+            {project.icons.map((icon) => (
+              <li key={icon.id} className={cn("grid grid-cols-[1.6rem_1fr_2rem] items-center border-b", selectedObjectId === icon.id && "bg-sidebar-accent")}>
+                <span />
+                <button type="button" onClick={() => selectObject(icon.id)} className="focus-ring flex min-h-12 items-center gap-2 px-2 text-left">
+                  <MapPin className="size-4 text-water" aria-hidden="true" />
+                  <span className="truncate text-[13px] font-semibold">{icon.iconId}</span>
+                </button>
+                <Switch checked={icon.visible} onCheckedChange={() => toggleObjectVisibility(icon.id)} aria-label={`${icon.visible ? "Hide" : "Show"} ${icon.iconId}`} className="scale-75" />
+              </li>
+            ))}
           </ol>
         </nav>
         <Separator />
@@ -148,6 +160,13 @@ export function TrailObjectPanel({ idPrefix = "" }: { idPrefix?: string }) {
               step={0.05}
               onChange={(value) => updateTrailNoise(selectedRoute.id, "warpStrength", value)}
             />
+          </section>
+        ) : selectedIcon ? (
+          <section className="grid gap-5 p-4">
+            <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-water">Placed symbol</p>
+            <h2 className="text-sm font-bold">{selectedIcon.iconId}</h2>
+            <NoiseControl id={`${idPrefix}trail-icon-scale`} label="Scale" value={selectedIcon.scale} min={0.1} max={5} step={0.1} onChange={(value) => updateSymbolTransform(selectedIcon.id, "scale", value)} />
+            <NoiseControl id={`${idPrefix}trail-icon-rotation`} label="Rotation" value={selectedIcon.rotation} min={-180} max={180} step={1} unit="°" onChange={(value) => updateSymbolTransform(selectedIcon.id, "rotation", value)} />
           </section>
         ) : selectedPoint ? (
           <section className="grid gap-3 p-4">

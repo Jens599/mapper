@@ -7,6 +7,7 @@ import {
   FolderOpen,
   HelpCircle,
   Map,
+  Shapes,
   Menu,
   Redo2,
   Save,
@@ -17,6 +18,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { MapCanvas } from "@/components/editor/map-canvas";
+import { IconLibrary } from "@/components/editor/icon-library";
 import { ObjectPanel } from "@/components/editor/object-panel";
 import { ProjectBuilder } from "@/components/editor/project-builder";
 import { ThemeToggle } from "@/components/editor/theme-toggle";
@@ -43,6 +45,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  exportCoordinatesCsv,
   exportPng,
   exportSvgWithBackground,
   exportTransparentSvg,
@@ -221,9 +224,15 @@ function TopBar() {
       <div className="ml-auto flex items-center gap-1">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="hidden md:flex">
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={`Switch project mode, currently ${project.kind === "travel" ? "travel map" : "trail sketch"}`}
+            >
               {project.kind === "travel" ? <Map aria-hidden="true" /> : <Route aria-hidden="true" />}
-              {project.kind === "travel" ? "Travel map" : "Trail sketch"}
+              <span className="hidden md:inline">
+                {project.kind === "travel" ? "Travel map" : "Trail sketch"}
+              </span>
               <ChevronDown aria-hidden="true" />
             </Button>
           </DropdownMenuTrigger>
@@ -243,6 +252,12 @@ function TopBar() {
             Builder
           </Button>
         </ProjectBuilder>
+        <IconLibrary>
+          <Button variant="ghost" size="sm" aria-label="Open symbol library">
+            <Shapes aria-hidden="true" />
+            <span className="hidden lg:inline">Symbols</span>
+          </Button>
+        </IconLibrary>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm">
@@ -264,6 +279,9 @@ function TopBar() {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={saveProject}>Project YAML</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => runExport(() => exportCoordinatesCsv(project), "CSV")}>
+              Coordinates CSV
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <ThemeToggle />

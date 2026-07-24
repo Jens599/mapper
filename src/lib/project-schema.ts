@@ -46,6 +46,21 @@ export const travelLegSchema = z.object({
   visible: z.boolean().default(true),
 });
 
+export const iconAssetSchema = z.object({
+  id: idSchema,
+  name: z.string().trim().min(1).max(100),
+  svg: z.string().min(1).max(250_000),
+});
+
+export const travelSymbolSchema = z.object({
+  id: idSchema,
+  iconId: idSchema,
+  coordinates: coordinateSchema,
+  scale: z.number().min(0.1).max(10),
+  rotation: z.number().min(-360).max(360),
+  visible: z.boolean().default(true),
+});
+
 export const trailNoiseSchema = z.object({
   seed: z.number().int().min(0).max(2_147_483_647),
   amplitude: z.number().min(0).max(500),
@@ -94,6 +109,8 @@ const travelProjectSchema = z.object({
     }),
     stops: z.array(stopSchema).min(2),
     legs: z.array(travelLegSchema),
+    iconAssets: z.array(iconAssetSchema).default([]),
+    symbols: z.array(travelSymbolSchema).default([]),
   });
 
 const trailProjectSchema = z.object({
@@ -127,6 +144,7 @@ const trailProjectSchema = z.object({
       visible: z.boolean().default(true),
     }),
   ),
+  iconAssets: z.array(iconAssetSchema).default([]),
 });
 
 export const projectSchema = z
@@ -136,7 +154,7 @@ export const projectSchema = z
 
     const objects =
       project.kind === "travel"
-        ? [...project.stops, ...project.legs]
+        ? [...project.stops, ...project.legs, ...project.symbols]
         : [...project.waypoints, ...project.routes, ...project.icons];
 
     for (const object of objects) {
@@ -203,6 +221,7 @@ export type LegStyle = z.infer<typeof legStyleSchema>;
 export type Coordinate = z.infer<typeof coordinateSchema>;
 export type TrailNoise = z.infer<typeof trailNoiseSchema>;
 export type TrailRoute = z.infer<typeof trailRouteSchema>;
+export type IconAsset = z.infer<typeof iconAssetSchema>;
 
 export function parseProject(input: unknown): MapperProject {
   return projectSchema.parse(input);

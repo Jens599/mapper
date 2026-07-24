@@ -4,6 +4,7 @@ import { LocateFixed, Minus, Plus } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { getIconSvg } from "@/lib/builtin-icons";
 import { generateConceptContours, generateTrailRoute } from "@/lib/trail-geometry";
 import { useEditorStore } from "@/store/editor-store";
 
@@ -118,20 +119,20 @@ export function TrailCanvas() {
           </g>
         ))}
 
-        {project.icons.filter((icon) => icon.visible).map((icon) => (
-          <g
-            key={icon.id}
-            transform={`translate(${icon.x} ${icon.y}) rotate(${icon.rotation}) scale(${icon.scale})`}
-            fill="var(--foreground)"
-            aria-label={icon.iconId}
-          >
-            {icon.iconId === "camp" ? (
-              <path d="M-12 9 0-12 12 9H6L0-2-6 9Z" />
-            ) : (
-              <path d="M-15 2C-8-6-1-3 3-7 8-11 13-6 16-1 9-4 4 1-2 1-7 1-10 5-15 2Z" fill="var(--water)" />
-            )}
-          </g>
-        ))}
+        {project.icons.filter((icon) => icon.visible).map((icon) => {
+          const svg = getIconSvg(icon.iconId, project.iconAssets);
+          if (!svg) return null;
+          const sizedSvg = svg.replace("<svg", '<svg width="32" height="32"');
+          return (
+            <g
+              key={icon.id}
+              transform={`translate(${icon.x} ${icon.y}) rotate(${icon.rotation}) scale(${icon.scale}) translate(-16 -16)`}
+              fill="var(--foreground)"
+              aria-label={icon.iconId}
+              dangerouslySetInnerHTML={{ __html: sizedSvg }}
+            />
+          );
+        })}
       </svg>
 
       <div className="pointer-events-none absolute left-4 top-4 border-l-4 border-trail bg-popover/94 px-4 py-3 shadow-md backdrop-blur-sm">

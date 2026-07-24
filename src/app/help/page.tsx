@@ -18,6 +18,10 @@ const sections = [
     body: "Mapper autosaves locally in IndexedDB. Save a portable .mapper.yaml file, open one from disk, or use Builder to edit the validated versioned YAML directly.",
   },
   {
+    title: "Symbols",
+    body: "Choose an Apache-2.0 Carbon symbol or import one or more SVG files. Place it at the project center, scatter twenty seeded copies, then adjust scale and rotation from the object rail.",
+  },
+  {
     title: "Exports",
     body: "Transparent SVG exports editable overlays without a background. Background SVG embeds the composed map. PNG captures the complete visible composition at double resolution.",
   },
