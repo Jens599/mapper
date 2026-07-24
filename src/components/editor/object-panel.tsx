@@ -2,19 +2,53 @@
 
 import {
   CarFront,
+  ChevronDown,
   Footprints,
+  MapPinned,
   MapPin,
   Mountain,
+  PanelLeftClose,
   Plane,
   Plus,
   Ship,
   TrainFront,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { NoiseControl } from "@/components/editor/noise-control";
 import { TrailObjectPanel } from "@/components/editor/trail-object-panel";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import type { TravelLeg, TravelScatter, TravelStop } from "@/lib/project-schema";
@@ -29,11 +63,39 @@ const modeIcons = {
   boat: Ship,
 } as const;
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function CollapsibleSection({
+  id,
+  label,
+  count,
+  children,
+}: {
+  id: string;
+  label: string;
+  count?: number;
+  children: React.ReactNode;
+}) {
+  const storageKey = `mapper-section-${id}`;
+  const [open, setOpen] = useState(true);
+
+  useEffect(() => {
+    setOpen(window.localStorage.getItem(storageKey) !== "closed");
+  }, [storageKey]);
+
   return (
-    <li className="border-b border-sidebar-border bg-muted/35 px-3 py-1.5 font-mono text-[9px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-      {children}
-    </li>
+    <Collapsible
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        window.localStorage.setItem(storageKey, nextOpen ? "open" : "closed");
+      }}
+    >
+      <CollapsibleTrigger className="focus-ring group flex w-full items-center gap-2 border-b border-sidebar-border bg-muted/35 px-3 py-1.5 text-left font-mono text-[9px] font-semibold uppercase tracking-[0.15em] text-muted-foreground hover:bg-muted/60">
+        <ChevronDown className="size-3 transition-transform group-data-[state=closed]:-rotate-90" aria-hidden="true" />
+        <span>{label}</span>
+        {count !== undefined ? <span className="ml-auto tabular-nums">{count}</span> : null}
+      </CollapsibleTrigger>
+      <CollapsibleContent>{children}</CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -45,6 +107,7 @@ function ObjectRow({
   index,
   icon: Icon,
   accent,
+  onSelectComplete,
 }: {
   id: string;
   name: string;
@@ -53,6 +116,7 @@ function ObjectRow({
   index: number;
   icon: typeof MapPin;
   accent?: "trail" | "water" | "terrain";
+  onSelectComplete?: () => void;
 }) {
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
   const selectObject = useEditorStore((state) => state.selectObject);
@@ -76,7 +140,10 @@ function ObjectRow({
       </span>
       <button
         type="button"
-        onClick={() => selectObject(id)}
+        onClick={() => {
+          selectObject(id);
+          onSelectComplete?.();
+        }}
         aria-current={selected ? "true" : undefined}
         className="focus-ring flex min-h-12 min-w-0 items-center gap-2 px-2 text-left"
       >
@@ -423,19 +490,183 @@ function SelectedProperties({ idPrefix }: { idPrefix: string }) {
   );
 }
 
+function AddTravelObject() {
+  const project = useEditorStore((state) => state.project);
+  const addTravelStop = useEditorStore((state) => state.addTravelStop);
+  const addTravelLeg = useEditorStore((state) => state.addTravelLeg);
+  const [dialog, setDialog] = useState<"stop" | "leg" | null>(null);
+  const [stopName, setStopName] = useState("New stop");
+  const [dayLabel, setDayLabel] = useState("DAY 1");
+  const [legName, setLegName] = useState("New travel leg");
+  const [mode, setMode] = useState<TravelLeg["mode"]>("drive");
+  const stops = project.kind === "travel" ? project.stops : [];
+  const longitude =
+    stops.reduce((sum, stop) => sum + stop.coordinates[0], 0) /
+    Math.max(1, stops.length);
+  const latitude =
+    stops.reduce((sum, stop) => sum + stop.coordinates[1], 0) /
+    Math.max(1, stops.length);
+  const [from, setFrom] = useState(stops[0]?.id ?? "");
+  const [to, setTo] = useState(stops[1]?.id ?? "");
+  const [longitudeValue, setLongitudeValue] = useState(longitude);
+  const [latitudeValue, setLatitudeValue] = useState(latitude);
+
+  if (project.kind !== "travel") return null;
+
+  function openSymbolLibrary() {
+    window.dispatchEvent(new CustomEvent("mapper:open-symbols"));
+  }
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon-sm" aria-label="Add itinerary object">
+            <Plus aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuLabel>Add to itinerary</DropdownMenuLabel>
+          <DropdownMenuItem onSelect={() => {
+            setLongitudeValue(longitude);
+            setLatitudeValue(latitude);
+            setDialog("stop");
+          }}>
+            <MapPin aria-hidden="true" /> Add stop
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={project.stops.length < 2}
+            onSelect={() => {
+              setFrom(project.stops[0]?.id ?? "");
+              setTo(project.stops[1]?.id ?? "");
+              setDialog("leg");
+            }}
+          >
+            <CarFront aria-hidden="true" /> Add travel leg
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={openSymbolLibrary}>
+            <MapPinned aria-hidden="true" /> Place symbol
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={openSymbolLibrary}>
+            <Mountain aria-hidden="true" /> Create scatter
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog open={dialog !== null} onOpenChange={(open) => !open && setDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{dialog === "leg" ? "Add travel leg" : "Add stop"}</DialogTitle>
+            <DialogDescription>
+              {dialog === "leg"
+                ? "Connect two itinerary stops. Styling can be refined after creation."
+                : "Create a stop at geographic coordinates. You can drag it on the map later."}
+            </DialogDescription>
+          </DialogHeader>
+          {dialog === "leg" ? (
+            <form
+              className="grid gap-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                addTravelLeg({ name: legName, from, to, mode });
+                setDialog(null);
+              }}
+            >
+              <div className="grid gap-1.5">
+                <Label htmlFor="new-leg-name">Name</Label>
+                <Input id="new-leg-name" value={legName} maxLength={100} onChange={(event) => setLegName(event.currentTarget.value)} required />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="new-leg-from">From</Label>
+                  <Select value={from} onValueChange={(value) => value && setFrom(value)}>
+                    <SelectTrigger id="new-leg-from"><SelectValue /></SelectTrigger>
+                    <SelectContent>{project.stops.map((stop) => <SelectItem key={stop.id} value={stop.id}>{stop.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="new-leg-to">To</Label>
+                  <Select value={to} onValueChange={(value) => value && setTo(value)}>
+                    <SelectTrigger id="new-leg-to"><SelectValue /></SelectTrigger>
+                    <SelectContent>{project.stops.map((stop) => <SelectItem key={stop.id} value={stop.id}>{stop.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="new-leg-mode">Travel mode</Label>
+                <Select value={mode} onValueChange={(value) => value && setMode(value as TravelLeg["mode"])}>
+                  <SelectTrigger id="new-leg-mode"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.keys(modeIcons).map((travelMode) => <SelectItem key={travelMode} value={travelMode}>{travelMode}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setDialog(null)}>Cancel</Button>
+                <Button type="submit" disabled={!legName.trim() || !from || !to || from === to}>Add leg</Button>
+              </DialogFooter>
+            </form>
+          ) : (
+            <form
+              className="grid gap-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                addTravelStop({
+                  name: stopName,
+                  dayLabel,
+                  coordinates: [longitudeValue, latitudeValue],
+                });
+                setDialog(null);
+              }}
+            >
+              <div className="grid gap-1.5">
+                <Label htmlFor="new-stop-name">Name</Label>
+                <Input id="new-stop-name" value={stopName} maxLength={80} onChange={(event) => setStopName(event.currentTarget.value)} required />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="new-stop-day">Day label</Label>
+                <Input id="new-stop-day" value={dayLabel} maxLength={24} onChange={(event) => setDayLabel(event.currentTarget.value)} required />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="new-stop-longitude">Longitude</Label>
+                  <Input id="new-stop-longitude" type="number" min={-180} max={180} step="any" value={longitudeValue} onChange={(event) => setLongitudeValue(event.currentTarget.valueAsNumber)} required />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="new-stop-latitude">Latitude</Label>
+                  <Input id="new-stop-latitude" type="number" min={-90} max={90} step="any" value={latitudeValue} onChange={(event) => setLatitudeValue(event.currentTarget.valueAsNumber)} required />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setDialog(null)}>Cancel</Button>
+                <Button type="submit" disabled={!stopName.trim() || !dayLabel.trim() || !Number.isFinite(longitudeValue) || !Number.isFinite(latitudeValue)}>Add stop</Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export function ObjectPanel({
   idPrefix = "",
   showAddAction = true,
+  onCollapse,
+  onObjectSelected,
 }: {
   idPrefix?: string;
   showAddAction?: boolean;
+  onCollapse?: () => void;
+  onObjectSelected?: () => void;
 }) {
   const project = useEditorStore((state) => state.project);
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
   const selectObject = useEditorStore((state) => state.selectObject);
 
   if (project.kind !== "travel") {
-    return <TrailObjectPanel idPrefix={idPrefix} />;
+    return <TrailObjectPanel idPrefix={idPrefix} onObjectSelected={onObjectSelected} />;
   }
 
   return (
@@ -447,21 +678,19 @@ export function ObjectPanel({
             {project.durationDays} days · travel map
           </p>
         </div>
-        {showAddAction ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Add itinerary object"
-            disabled
-          >
-            <Plus aria-hidden="true" />
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-0.5">
+          {showAddAction ? <AddTravelObject /> : null}
+          {onCollapse ? (
+            <Button variant="ghost" size="icon-sm" aria-label="Collapse object rail" onClick={onCollapse}>
+              <PanelLeftClose aria-hidden="true" />
+            </Button>
+          ) : null}
+        </div>
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <nav aria-label="Itinerary objects">
-          <ol>
-            <SectionLabel>Stops</SectionLabel>
+          <CollapsibleSection id={`${idPrefix}travel-stops`} label="Stops" count={project.stops.length}>
+            <ol>
             {project.stops.map((stop, index) => (
               <ObjectRow
                 key={stop.id}
@@ -472,9 +701,13 @@ export function ObjectPanel({
                 index={index + 1}
                 icon={MapPin}
                 accent="trail"
+                onSelectComplete={onObjectSelected}
               />
             ))}
-            <SectionLabel>Travel legs</SectionLabel>
+            </ol>
+          </CollapsibleSection>
+          <CollapsibleSection id={`${idPrefix}travel-legs`} label="Travel legs" count={project.legs.length}>
+            <ol>
             {project.legs.map((leg, index) => (
               <ObjectRow
                 key={leg.id}
@@ -485,9 +718,14 @@ export function ObjectPanel({
                 index={index + 1}
                 icon={modeIcons[leg.mode]}
                 accent={leg.mode === "flight" ? "water" : "trail"}
+                onSelectComplete={onObjectSelected}
               />
             ))}
-            {project.symbols.length ? <SectionLabel>Symbols</SectionLabel> : null}
+            </ol>
+          </CollapsibleSection>
+          {project.symbols.length ? (
+          <CollapsibleSection id={`${idPrefix}travel-symbols`} label="Symbols" count={project.symbols.length}>
+            <ol>
             {project.symbols.map((symbol, index) => (
               <ObjectRow
                 key={symbol.id}
@@ -498,9 +736,15 @@ export function ObjectPanel({
                 index={index + 1}
                 icon={MapPin}
                 accent="water"
+                onSelectComplete={onObjectSelected}
               />
             ))}
-            {project.scatter.length ? <SectionLabel>Scatter rules</SectionLabel> : null}
+            </ol>
+          </CollapsibleSection>
+          ) : null}
+          {project.scatter.length ? (
+          <CollapsibleSection id={`${idPrefix}travel-scatter`} label="Scatter rules" count={project.scatter.length}>
+            <ol>
             {project.scatter.map((scatter, index) => (
               <ObjectRow
                 key={scatter.id}
@@ -511,9 +755,14 @@ export function ObjectPanel({
                 index={index + 1}
                 icon={Mountain}
                 accent="terrain"
+                onSelectComplete={onObjectSelected}
               />
             ))}
-            <SectionLabel>Map context</SectionLabel>
+            </ol>
+          </CollapsibleSection>
+          ) : null}
+          <CollapsibleSection id={`${idPrefix}travel-context`} label="Map context" count={1}>
+            <ol>
             <li
               className={cn(
                 "grid grid-cols-[1.6rem_1fr_2rem] items-center border-b border-sidebar-border",
@@ -523,7 +772,10 @@ export function ObjectPanel({
               <span className="self-stretch border-r border-sidebar-border" />
               <button
                 type="button"
-                onClick={() => selectObject("terrain-context")}
+                onClick={() => {
+                  selectObject("terrain-context");
+                  onObjectSelected?.();
+                }}
                 aria-current={
                   selectedObjectId === "terrain-context" ? "true" : undefined
                 }
@@ -544,10 +796,13 @@ export function ObjectPanel({
                 className="scale-75"
               />
             </li>
-          </ol>
+            </ol>
+          </CollapsibleSection>
         </nav>
         <Separator />
-        <SelectedProperties idPrefix={idPrefix} />
+        <CollapsibleSection id={`${idPrefix}travel-properties`} label="Selected properties">
+          <SelectedProperties idPrefix={idPrefix} />
+        </CollapsibleSection>
       </ScrollArea>
     </div>
   );

@@ -186,12 +186,17 @@ export const useEditorStore = create<EditorState>()(
     },
     addTravelStop: (stop) => {
       set((state) => {
-        if (state.project.kind !== "travel" || !stop.name.trim()) return;
+        if (
+          state.project.kind !== "travel" ||
+          !stop.name.trim() ||
+          !stop.dayLabel.trim() ||
+          !stop.coordinates.every(Number.isFinite)
+        ) return;
         const id = `stop-${Date.now()}`;
         state.project.stops.push({
           id,
-          name: stop.name.trim(),
-          dayLabel: stop.dayLabel.trim(),
+          name: stop.name.trim().slice(0, 80),
+          dayLabel: stop.dayLabel.trim().slice(0, 24),
           coordinates: [
             ((stop.coordinates[0] + 180) % 360 + 360) % 360 - 180,
             Math.min(90, Math.max(-90, stop.coordinates[1])),
@@ -215,7 +220,7 @@ export const useEditorStore = create<EditorState>()(
         const id = `leg-${Date.now()}`;
         state.project.legs.push({
           id,
-          name: leg.name.trim(),
+          name: leg.name.trim().slice(0, 100),
           from: leg.from,
           to: leg.to,
           mode: leg.mode,

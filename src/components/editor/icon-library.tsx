@@ -2,7 +2,7 @@
 
 import DOMPurify from "dompurify";
 import { FolderOpen, MapPin, RefreshCw, ScatterChart } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +40,7 @@ export function IconLibrary({ children }: { children: React.ReactNode }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
   const [scatterOptions, setScatterOptions] = useState({
     count: 20,
     seed: 42,
@@ -51,6 +52,12 @@ export function IconLibrary({ children }: { children: React.ReactNode }) {
     rotationMax: 15,
   });
   const icons = [...builtinIcons, ...project.iconAssets.map((asset) => ({ ...asset, pack: "Imported" as const }))];
+
+  useEffect(() => {
+    const openLibrary = () => setOpen(true);
+    window.addEventListener("mapper:open-symbols", openLibrary);
+    return () => window.removeEventListener("mapper:open-symbols", openLibrary);
+  }, []);
 
   async function importFiles(files: FileList | null) {
     if (!files?.length) return;
@@ -69,7 +76,7 @@ export function IconLibrary({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <Sheet>
+    <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>{children}</SheetTrigger>
       <SheetContent className="w-[min(92vw,34rem)] max-w-none gap-0 p-0 sm:max-w-none">
         <SheetHeader className="border-b p-4">
@@ -177,10 +184,16 @@ export function IconLibrary({ children }: { children: React.ReactNode }) {
           <Button className="w-full justify-start" variant="outline" onClick={() => folderInputRef.current?.click()}>
             <FolderOpen aria-hidden="true" /> Import folder
           </Button>
-          <Button className="w-full justify-start" variant="outline" onClick={placeSelectedIcon}>
+          <Button className="w-full justify-start" variant="outline" onClick={() => {
+            placeSelectedIcon();
+            setOpen(false);
+          }}>
             <MapPin aria-hidden="true" /> Place center
           </Button>
-          <Button className="w-full justify-start" onClick={() => scatterSelectedIcon(scatterOptions)}>
+          <Button className="w-full justify-start" onClick={() => {
+            scatterSelectedIcon(scatterOptions);
+            setOpen(false);
+          }}>
             <ScatterChart aria-hidden="true" /> Create scatter
           </Button>
         </SheetFooter>

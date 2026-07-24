@@ -7,6 +7,9 @@ import {
   FolderOpen,
   HelpCircle,
   Map,
+  MapPin,
+  Mountain,
+  PanelLeftOpen,
   Shapes,
   Menu,
   Redo2,
@@ -16,6 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { usePanelRef } from "react-resizable-panels";
 
 import { MapCanvas } from "@/components/editor/map-canvas";
 import { IconLibrary } from "@/components/editor/icon-library";
@@ -32,13 +36,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import {
   Tooltip,
   TooltipContent,
@@ -118,8 +129,8 @@ function MobileObjectSheet() {
   }, []);
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
+    <Drawer open={open} onOpenChange={setOpen}>
+      <DrawerTrigger asChild>
         <Button
           variant="ghost"
           size="icon"
@@ -128,17 +139,20 @@ function MobileObjectSheet() {
         >
           <Menu aria-hidden="true" />
         </Button>
-      </SheetTrigger>
-      <SheetContent side="bottom" className="h-[78dvh] gap-0 p-0 md:hidden">
-        <SheetHeader className="sr-only">
-          <SheetTitle>Project objects</SheetTitle>
-          <SheetDescription>
+      </DrawerTrigger>
+      <DrawerContent className="h-[82dvh] p-0 md:hidden">
+        <DrawerHeader className="sr-only">
+          <DrawerTitle>Project objects</DrawerTitle>
+          <DrawerDescription>
             Select layers and edit route generation settings.
-          </SheetDescription>
-        </SheetHeader>
-        <ObjectPanel idPrefix="mobile-" showAddAction={false} />
-      </SheetContent>
-    </Sheet>
+          </DrawerDescription>
+        </DrawerHeader>
+        <ObjectPanel idPrefix="mobile-" showAddAction={false} onObjectSelected={() => setOpen(false)} />
+        <DrawerFooter className="border-t p-2">
+          <DrawerClose asChild><Button variant="outline">Done</Button></DrawerClose>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   );
 }
 
@@ -318,6 +332,29 @@ function TopBar() {
 
 export function EditorShell() {
   useProjectAutosave();
+  const project = useEditorStore((state) => state.project);
+  const selectObject = useEditorStore((state) => state.selectObject);
+  const railRef = usePanelRef();
+  const [railCollapsed, setRailCollapsed] = useState(false);
+  const [desktop, setDesktop] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 768px)");
+    const update = () => setDesktop(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (!desktop) return;
+    const savedWidth = Number(window.localStorage.getItem("mapper-object-rail-width"));
+    const collapsed = window.localStorage.getItem("mapper-object-rail-collapsed") === "true";
+    requestAnimationFrame(() => {
+      if (collapsed) railRef.current?.collapse();
+      else if (savedWidth >= 240 && savedWidth <= 480) railRef.current?.resize(savedWidth);
+    });
+  }, [desktop, railRef]);
   return (
     <main className="flex h-dvh min-h-0 flex-col overflow-hidden">
       <h1 className="sr-only">Mapper travel and trail editor</h1>
@@ -328,14 +365,63 @@ export function EditorShell() {
         Skip to canvas
       </a>
       <TopBar />
-      <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-[19rem] shrink-0 border-r md:block">
-          <ObjectPanel />
-        </aside>
-        <div id="canvas" tabIndex={-1} className="flex min-w-0 flex-1">
+      {desktop ? (
+      <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+        <ResizablePanel
+          panelRef={railRef}
+          defaultSize={304}
+          minSize={240}
+          maxSize={480}
+          collapsible
+          collapsedSize={48}
+          className="border-r"
+          onResize={(size) => {
+            const collapsed = size.inPixels <= 52;
+            setRailCollapsed(collapsed);
+            window.localStorage.setItem("mapper-object-rail-collapsed", String(collapsed));
+            if (!collapsed) {
+              window.localStorage.setItem("mapper-object-rail-width", String(size.inPixels));
+            }
+          }}
+        >
+          {railCollapsed ? (
+            <aside className="flex h-full flex-col items-center gap-1 bg-sidebar py-2">
+              <Button variant="ghost" size="icon-sm" aria-label="Expand object rail" onClick={() => railRef.current?.expand()}>
+                <PanelLeftOpen aria-hidden="true" />
+              </Button>
+              <div className="my-1 h-px w-6 bg-sidebar-border" />
+              <Button variant="ghost" size="icon-sm" aria-label={project.kind === "travel" ? "Select first stop" : "Select first waypoint"} onClick={() => {
+                const id = project.kind === "travel" ? project.stops[0]?.id : project.waypoints[0]?.id;
+                if (id) selectObject(id);
+              }}>
+                <MapPin aria-hidden="true" />
+              </Button>
+              <Button variant="ghost" size="icon-sm" aria-label={project.kind === "travel" ? "Select first travel leg" : "Select first trail route"} onClick={() => {
+                const id = project.kind === "travel" ? project.legs[0]?.id : project.routes[0]?.id;
+                if (id) selectObject(id);
+              }}>
+                <Route aria-hidden="true" />
+              </Button>
+              <Button variant="ghost" size="icon-sm" aria-label="Select terrain" onClick={() => selectObject(project.kind === "travel" ? "terrain-context" : "trail-terrain")}>
+                <Mountain aria-hidden="true" />
+              </Button>
+            </aside>
+          ) : (
+            <aside className="h-full"><ObjectPanel onCollapse={() => railRef.current?.collapse()} /></aside>
+          )}
+        </ResizablePanel>
+        <ResizableHandle withHandle />
+        <ResizablePanel minSize={320}>
+          <div id="canvas" tabIndex={-1} className="flex size-full min-w-0">
+            <MapCanvas />
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+      ) : (
+        <div id="canvas" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1">
           <MapCanvas />
         </div>
-      </div>
+      )}
     </main>
   );
 }

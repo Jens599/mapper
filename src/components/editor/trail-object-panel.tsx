@@ -1,15 +1,36 @@
 "use client";
 
-import { MapPin, Mountain, Route } from "lucide-react";
+import { ChevronDown, MapPin, Mountain, Route } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { NoiseControl } from "@/components/editor/noise-control";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/store/editor-store";
 
-export function TrailObjectPanel({ idPrefix = "" }: { idPrefix?: string }) {
+function TrailSection({ id, label, count, children }: { id: string; label: string; count?: number; children: React.ReactNode }) {
+  const storageKey = `mapper-section-${id}`;
+  const [open, setOpen] = useState(true);
+  useEffect(() => setOpen(window.localStorage.getItem(storageKey) !== "closed"), [storageKey]);
+  return (
+    <Collapsible open={open} onOpenChange={(next) => {
+      setOpen(next);
+      window.localStorage.setItem(storageKey, next ? "open" : "closed");
+    }}>
+      <CollapsibleTrigger className="focus-ring group flex w-full items-center gap-2 border-b bg-muted/35 px-3 py-1.5 text-left font-mono text-[9px] font-semibold uppercase tracking-[0.15em] text-muted-foreground hover:bg-muted/60">
+        <ChevronDown className="size-3 transition-transform group-data-[state=closed]:-rotate-90" aria-hidden="true" />
+        {label}
+        {count !== undefined ? <span className="ml-auto">{count}</span> : null}
+      </CollapsibleTrigger>
+      <CollapsibleContent>{children}</CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+export function TrailObjectPanel({ idPrefix = "", onObjectSelected }: { idPrefix?: string; onObjectSelected?: () => void }) {
   const project = useEditorStore((state) => state.project);
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
   const selectObject = useEditorStore((state) => state.selectObject);
@@ -35,10 +56,8 @@ export function TrailObjectPanel({ idPrefix = "" }: { idPrefix?: string }) {
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <nav aria-label="Trail objects">
-          <ol>
-            <li className="border-b bg-muted/35 px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.15em] text-muted-foreground">
-              Waypoints
-            </li>
+          <TrailSection id={`${idPrefix}trail-waypoints`} label="Waypoints" count={project.waypoints.length}>
+            <ol>
             {project.waypoints.map((point, index) => (
               <li
                 key={point.id}
@@ -50,7 +69,10 @@ export function TrailObjectPanel({ idPrefix = "" }: { idPrefix?: string }) {
                 <span className="text-center font-mono text-[9px] text-muted-foreground">{index + 1}</span>
                 <button
                   type="button"
-                  onClick={() => selectObject(point.id)}
+                  onClick={() => {
+                    selectObject(point.id);
+                    onObjectSelected?.();
+                  }}
                   className="focus-ring flex min-h-12 items-center gap-2 px-2 text-left"
                 >
                   <MapPin className="size-4 text-trail" aria-hidden="true" />
@@ -69,9 +91,10 @@ export function TrailObjectPanel({ idPrefix = "" }: { idPrefix?: string }) {
                 />
               </li>
             ))}
-            <li className="border-b bg-muted/35 px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.15em] text-muted-foreground">
-              Routes and terrain
-            </li>
+            </ol>
+          </TrailSection>
+          <TrailSection id={`${idPrefix}trail-routes`} label="Routes and terrain" count={project.routes.length + 1}>
+            <ol>
             {project.routes.map((route) => (
               <li
                 key={route.id}
@@ -83,7 +106,10 @@ export function TrailObjectPanel({ idPrefix = "" }: { idPrefix?: string }) {
                 <span />
                 <button
                   type="button"
-                  onClick={() => selectObject(route.id)}
+                  onClick={() => {
+                    selectObject(route.id);
+                    onObjectSelected?.();
+                  }}
                   className="focus-ring flex min-h-12 items-center gap-2 px-2 text-left"
                 >
                   <Route className="size-4 text-trail" aria-hidden="true" />
@@ -101,7 +127,10 @@ export function TrailObjectPanel({ idPrefix = "" }: { idPrefix?: string }) {
               <span />
               <button
                 type="button"
-                onClick={() => selectObject("trail-terrain")}
+                onClick={() => {
+                  selectObject("trail-terrain");
+                  onObjectSelected?.();
+                }}
                 className="focus-ring flex min-h-12 items-center gap-2 px-2 text-left"
               >
                 <Mountain className="size-4 text-terrain" aria-hidden="true" />
@@ -114,27 +143,40 @@ export function TrailObjectPanel({ idPrefix = "" }: { idPrefix?: string }) {
                 className="scale-75"
               />
             </li>
+            </ol>
+          </TrailSection>
+          {project.icons.length ? (
+          <TrailSection id={`${idPrefix}trail-icons`} label="Symbols" count={project.icons.length}>
+            <ol>
             {project.icons.map((icon) => (
               <li key={icon.id} className={cn("grid grid-cols-[1.6rem_1fr_2rem] items-center border-b", selectedObjectId === icon.id && "bg-sidebar-accent")}>
                 <span />
-                <button type="button" onClick={() => selectObject(icon.id)} className="focus-ring flex min-h-12 items-center gap-2 px-2 text-left">
+                <button type="button" onClick={() => { selectObject(icon.id); onObjectSelected?.(); }} className="focus-ring flex min-h-12 items-center gap-2 px-2 text-left">
                   <MapPin className="size-4 text-water" aria-hidden="true" />
                   <span className="truncate text-[13px] font-semibold">{icon.iconId}</span>
                 </button>
                 <Switch checked={icon.visible} onCheckedChange={() => toggleObjectVisibility(icon.id)} aria-label={`${icon.visible ? "Hide" : "Show"} ${icon.iconId}`} className="scale-75" />
               </li>
             ))}
+            </ol>
+          </TrailSection>
+          ) : null}
+          {project.scatter.length ? (
+          <TrailSection id={`${idPrefix}trail-scatter`} label="Scatter rules" count={project.scatter.length}>
+            <ol>
             {project.scatter.map((scatter) => (
               <li key={scatter.id} className={cn("grid grid-cols-[1.6rem_1fr_2rem] items-center border-b", selectedObjectId === scatter.id && "bg-sidebar-accent")}>
                 <span />
-                <button type="button" onClick={() => selectObject(scatter.id)} className="focus-ring flex min-h-12 items-center gap-2 px-2 text-left">
+                <button type="button" onClick={() => { selectObject(scatter.id); onObjectSelected?.(); }} className="focus-ring flex min-h-12 items-center gap-2 px-2 text-left">
                   <Mountain className="size-4 text-terrain" aria-hidden="true" />
                   <span className="min-w-0"><span className="block truncate text-[13px] font-semibold">{scatter.name}</span><span className="font-mono text-[9px] text-muted-foreground">{scatter.count} · {scatter.region.type}</span></span>
                 </button>
                 <Switch checked={scatter.visible} onCheckedChange={() => toggleObjectVisibility(scatter.id)} aria-label={`${scatter.visible ? "Hide" : "Show"} ${scatter.name}`} className="scale-75" />
               </li>
             ))}
-          </ol>
+            </ol>
+          </TrailSection>
+          ) : null}
         </nav>
         <Separator />
         {selectedRoute ? (
