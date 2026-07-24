@@ -310,6 +310,7 @@ export function MapCanvas() {
         if (disposed || !containerRef.current) return;
 
         maplibreRef.current = maplibre;
+        maplibre.setWorkerUrl("/maplibre-gl-worker.mjs");
         const demSource = new contourModule.default.DemSource({
           url: TERRAIN_TILES,
           encoding: "terrarium",
