@@ -34,6 +34,7 @@ const presentationSchema = z.object({
   lineScale: z.number().min(0.25).max(4),
   textScale: z.number().min(0.5).max(3),
   symbolScale: z.number().min(0.25).max(4),
+  showModeIcons: z.boolean().default(false),
 });
 
 export const legStyleSchema = z.object({
@@ -212,6 +213,7 @@ const travelProjectSchema = z.object({
       lineScale: 1,
       textScale: 1,
       symbolScale: 1,
+      showModeIcons: false,
     }),
     map: z.object({
       display: z.enum(["geographic", "symbolic"]).default("symbolic"),
@@ -239,6 +241,7 @@ const trailProjectSchema = z.object({
     lineScale: 1,
     textScale: 1,
     symbolScale: 1,
+    showModeIcons: false,
   }),
   canvas: z.object({
     width: z.number().positive().max(100_000),

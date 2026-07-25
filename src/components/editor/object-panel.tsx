@@ -556,37 +556,48 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
           No map
         </Button>
       </div>
-      <div className="grid gap-1.5" style={{ display: mapSettings.display === "symbolic" ? "" : "none" }}>
-        <Label>Background</Label>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {[
-            { label: "Canvas", value: "#e9efeb" },
-            { label: "Paper", value: "#f5f0e8" },
-            { label: "Slate", value: "#d6dce4" },
-            { label: "Sand", value: "#ede0c8" },
-            { label: "Moss", value: "#dce3d4" },
-            { label: "Dusk", value: "#c8d0d8" },
-          ].map((preset) => (
-            <button
-              key={preset.value}
-              type="button"
-              title={preset.label}
-              className="size-7 cursor-pointer rounded-full border border-border/60"
-              style={{ backgroundColor: preset.value }}
-              onClick={() => setMapBackground(preset.value)}
-              aria-label={preset.label}
+      {mapSettings.display === "symbolic" ? (
+        <>
+          <div className="grid gap-1.5">
+            <Label>Background</Label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[
+                { label: "Canvas", value: "#e9efeb" },
+                { label: "Paper", value: "#f5f0e8" },
+                { label: "Slate", value: "#d6dce4" },
+                { label: "Sand", value: "#ede0c8" },
+                { label: "Moss", value: "#dce3d4" },
+                { label: "Dusk", value: "#c8d0d8" },
+              ].map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  title={preset.label}
+                  className="size-7 cursor-pointer rounded-full border border-border/60"
+                  style={{ backgroundColor: preset.value }}
+                  onClick={() => setMapBackground(preset.value)}
+                  aria-label={preset.label}
+                />
+              ))}
+              <input
+                type="color"
+                value={mapSettings.background}
+                onChange={(e) => setMapBackground(e.target.value)}
+                className="size-7 cursor-pointer rounded-full border-0 p-0"
+                title="Custom color"
+                aria-label="Custom background color"
+              />
+            </div>
+          </div>
+          <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
+            Transport icons
+            <Switch
+              checked={presentation.showModeIcons}
+              onCheckedChange={(checked) => updatePresentation("showModeIcons", checked)}
             />
-          ))}
-          <input
-            type="color"
-            value={mapSettings.background}
-            onChange={(e) => setMapBackground(e.target.value)}
-            className="size-7 cursor-pointer rounded-full border-0 p-0"
-            title="Custom color"
-            aria-label="Custom background color"
-          />
-        </div>
-      </div>
+          </label>
+        </>
+      ) : null}
       <div className="grid gap-1.5">
         <Label htmlFor={`${idPrefix}basemap-style`}>OpenStreetMap style</Label>
         <Select

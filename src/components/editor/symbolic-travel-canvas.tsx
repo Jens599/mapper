@@ -418,8 +418,16 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
             arrowLabelY = routeEnd.y - normalY * 15;
           }
           const destinationDay = project.stops.find((stop) => stop.id === leg.to)?.dayLabel;
-          const legIconSvg = leg.iconId ? getIconSvg(leg.iconId, project.iconAssets) : null;
-          const sizedLegIcon = legIconSvg ? sizeIconSvg(legIconSvg, { width: 20, height: 20 }) : null;
+          const modeIconMap: Record<string, string> = {
+            walk: "carbon-walk",
+            drive: "carbon-car",
+            flight: "carbon-airport",
+            train: "carbon-train",
+            boat: "carbon-boat",
+          };
+          const effectiveIconId = leg.iconId || (project.presentation.showModeIcons ? modeIconMap[leg.mode] : null);
+          const legIconSvg = effectiveIconId ? getIconSvg(effectiveIconId, project.iconAssets) : null;
+          const sizedLegIcon = legIconSvg ? sizeIconSvg(legIconSvg, { width: 20, height: 20, color: canvasFg }) : null;
           return (
             <g key={leg.id} onClick={() => selectObject(leg.id)} className="cursor-pointer">
               <path d={path} fill="none" stroke="var(--card)" strokeWidth={10 * lineScale} strokeLinecap="round" />
