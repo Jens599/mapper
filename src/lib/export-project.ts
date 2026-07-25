@@ -65,7 +65,12 @@ function buildTravelOverlaySvg(project: TravelProject) {
         })
         .join(" ");
       const dash = feature.properties.line === "dashed" ? ' stroke-dasharray="10 9"' : feature.properties.line === "dotted" ? ' stroke-dasharray="1 7"' : "";
-      return `<path d="${path}" fill="none" stroke="${feature.properties.color}" stroke-width="${4 * project.presentation.lineScale}" stroke-linecap="round"${dash}/>`;
+      const arrowCoordinate = feature.geometry.coordinates[Math.max(0, feature.geometry.coordinates.length - 3)];
+      const [arrowX, arrowY] = projectPoint(arrowCoordinate);
+      const dayLabel = feature.properties.showDayLabel
+        ? `<g transform="translate(${arrowX.toFixed(1)} ${arrowY.toFixed(1)})"><rect x="-25" y="-9" width="50" height="16" rx="8" fill="#f8faf8" stroke="${feature.properties.color}"/><text y="3" text-anchor="middle" font-family="monospace" font-size="8" font-weight="700" fill="${feature.properties.color}">${escapeXml(feature.properties.dayLabel)}</text></g>`
+        : "";
+      return `<path d="${path}" fill="none" stroke="${feature.properties.color}" stroke-width="${4 * project.presentation.lineScale}" stroke-linecap="round" marker-end="url(#travel-arrow)"${dash}/>${dayLabel}`;
     })
     .join("");
   const stops = project.stops
@@ -73,8 +78,16 @@ function buildTravelOverlaySvg(project: TravelProject) {
     .map((stop) => {
       const [x, y] = projectPoint(stop.coordinates);
       const rawIconSvg = getPointIconSvg(stop.icon, project.iconAssets);
-      const iconSvg = rawIconSvg ? sizeIconSvg(rawIconSvg, { x: -9, y: -9, width: 18, height: 18, color: "white" }) : "";
-      return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)})"><circle r="11" fill="#ad4a24" stroke="#fff" stroke-width="3"/>${iconSvg}<g transform="translate(${stop.labelOffset[0]} ${stop.labelOffset[1]})"><text x="14" y="-5" font-family="sans-serif" font-size="${14 * project.presentation.textScale}" font-weight="700" fill="#18221d">${escapeXml(stop.name)}</text><text x="14" y="13" font-family="monospace" font-size="${10 * project.presentation.textScale}" font-weight="600" fill="#99401f">${escapeXml(stop.dayLabel)}</text></g></g>`;
+      const iconSvg = rawIconSvg ? sizeIconSvg(rawIconSvg, { x: -9, y: -9, width: 18, height: 18, color: "#ad4a24" }) : "";
+      const anchor = stop.labelAnchor === "auto" ? "right" : stop.labelAnchor;
+      const label = anchor === "top"
+        ? { x: 0, nameY: -28, dayY: -14, align: "middle" }
+        : anchor === "bottom"
+          ? { x: 0, nameY: 30, dayY: 44, align: "middle" }
+          : anchor === "left"
+            ? { x: -16, nameY: -5, dayY: 13, align: "end" }
+            : { x: 16, nameY: -5, dayY: 13, align: "start" };
+      return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)})"><circle r="12" fill="#f8faf8" stroke="#ad4a24" stroke-width="2.5"/>${iconSvg}<g transform="translate(${stop.labelOffset[0]} ${stop.labelOffset[1]})"><text x="${label.x}" y="${label.nameY}" text-anchor="${label.align}" font-family="sans-serif" font-size="${14 * project.presentation.textScale}" font-weight="700" fill="#18221d">${escapeXml(stop.name)}</text><text x="${label.x}" y="${label.dayY}" text-anchor="${label.align}" font-family="monospace" font-size="${10 * project.presentation.textScale}" font-weight="600" fill="#99401f">${escapeXml(stop.dayLabel)}</text></g></g>`;
     })
     .join("");
   const symbols = project.symbols
@@ -97,7 +110,28 @@ function buildTravelOverlaySvg(project: TravelProject) {
     })
     .join("");
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(project.name)} travel itinerary"><g>${routes}${scatterSymbols}${symbols}${stops}</g><text x="${padding}" y="40" font-family="sans-serif" font-size="24" font-weight="700" fill="#18221d">${escapeXml(project.name)}</text></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(project.name)} travel itinerary"><defs><marker id="travel-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="context-stroke"/></marker></defs><g>${routes}${scatterSymbols}${symbols}${stops}</g><text x="${padding}" y="40" font-family="sans-serif" font-size="24" font-weight="700" fill="#18221d">${escapeXml(project.name)}</text></svg>`;
+}
+
+function resolveSvgVariables(svg: SVGSVGElement) {
+  const variables: Record<string, string> = {
+    "--terrain": "#356c52",
+    "--trail": "#ad4a24",
+    "--card": "#f8faf8",
+    "--foreground": "#18221d",
+    "--canvas": "#e9efeb",
+    "--water": "#216b8b",
+  };
+  const walker = document.createTreeWalker(svg, NodeFilter.SHOW_ELEMENT);
+  let node: Element | null;
+  while ((node = walker.nextNode() as Element | null) !== null) {
+    for (const attr of Array.from(node.attributes)) {
+      const resolved = attr.value.replace(/var\((--[\w-]+)\)/g, (_, name) => variables[name] ?? attr.value);
+      if (resolved !== attr.value) {
+        node.setAttribute(attr.name, resolved);
+      }
+    }
+  }
 }
 
 export function exportTransparentSvg(project: MapperProject) {
@@ -110,9 +144,7 @@ export function exportTransparentSvg(project: MapperProject) {
     const clone = canvas.cloneNode(true) as SVGSVGElement;
     clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
     clone.removeAttribute("class");
-    const style = document.createElementNS("http://www.w3.org/2000/svg", "style");
-    style.textContent = `:root{--terrain:#356c52;--trail:#ad4a24;--card:#f8faf8;--foreground:#18221d;--canvas:#e9efeb;--water:#216b8b}`;
-    clone.prepend(style);
+    resolveSvgVariables(clone);
     source = new XMLSerializer().serializeToString(clone);
   }
   downloadBlob(
