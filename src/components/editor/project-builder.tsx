@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/resizable";
 import { deserializeProject, serializeProject } from "@/lib/project-io";
 import { useEditorStore } from "@/store/editor-store";
+import { getIconIds } from "@/lib/icons";
 
 const CodeMirror = dynamic(() => import("@uiw/react-codemirror"), {
   ssr: false,
@@ -56,6 +57,16 @@ const mapperCompletions = [
   "waypointId", "along-route", "routeId", "rectangle",
   "waypoints", "routes", "terrain", "icons", "visible",
 ].map((label) => ({ label, type: "property" }));
+
+const iconCompletions = getIconIds().map((id) => ({ label: id, type: "constant" }));
+
+function iconValueCompletionSource(context: CompletionContext) {
+  const word = context.matchBefore(/[\w-]*/);
+  if (!word || (word.from === word.to && !context.explicit)) return null;
+  const lineBefore = context.state.sliceDoc(Math.max(0, word.from - 25), word.from);
+  if (!/(?:^|\n)\s*(?:icon|iconId|icons):\s*$/.test(lineBefore)) return null;
+  return { from: word.from, options: iconCompletions };
+}
 
 function mapperCompletionSource(context: CompletionContext) {
   const word = context.matchBefore(/[\w-]*/);
@@ -191,7 +202,7 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
             extensions={[
               yaml(),
               syntaxHighlighting(accessibleYamlHighlight),
-              autocompletion({ override: [mapperCompletionSource] }),
+              autocompletion({ override: [iconValueCompletionSource, mapperCompletionSource] }),
               linter((view) => {
                 try {
                   deserializeProject(view.state.doc.toString());
