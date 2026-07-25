@@ -558,7 +558,7 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
       </div>
       <div className="grid gap-1.5" style={{ display: mapSettings.display === "symbolic" ? "" : "none" }}>
         <Label>Background</Label>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {[
             { label: "Canvas", value: "#e9efeb" },
             { label: "Paper", value: "#f5f0e8" },
@@ -577,6 +577,14 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
               aria-label={preset.label}
             />
           ))}
+          <input
+            type="color"
+            value={mapSettings.background}
+            onChange={(e) => setMapBackground(e.target.value)}
+            className="size-7 cursor-pointer rounded-full border-0 p-0"
+            title="Custom color"
+            aria-label="Custom background color"
+          />
         </div>
       </div>
       <div className="grid gap-1.5">

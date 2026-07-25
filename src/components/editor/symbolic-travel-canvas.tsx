@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { getIconSvg, getPointIconSvg, sizeIconSvg } from "@/lib/builtin-icons";
+import { foregroundFromBackground, mutedFromBackground } from "@/lib/color-utils";
 import type { Coordinate, TravelProject, TravelScatter } from "@/lib/project-schema";
 import { generateTravelScatter, geographicToSymbolic } from "@/lib/scatter";
 import { getSymbolicStopPositions } from "@/lib/travel-geometry";
@@ -158,7 +159,6 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const moveSymbolicStop = useEditorStore((state) => state.moveSymbolicStop);
   const moveSymbolicSymbol = useEditorStore((state) => state.moveSymbolicSymbol);
   const updateLegStyle = useEditorStore((state) => state.updateLegStyle);
-  const clearSelection = useEditorStore((state) => state.clearSelection);
   const resetSymbolicLayout = useEditorStore((state) => state.resetSymbolicLayout);
   const svgRef = useRef<SVGSVGElement>(null);
   const [titleVisible, setTitleVisible] = useState(true);
@@ -175,6 +175,8 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const { lineScale, textScale, symbolScale } = project.presentation;
   const viewWidth = 1000 / viewport.zoom;
   const viewHeight = 700 / viewport.zoom;
+  const canvasFg = foregroundFromBackground(project.map.background);
+  const canvasMuted = mutedFromBackground(project.map.background);
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -279,7 +281,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
       aria-label="No map travel itinerary"
       data-export-root
       className="canvas-grid relative min-h-0 flex-1 overflow-hidden outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/60"
-      style={{ "--canvas-bg": project.map.background } as React.CSSProperties}
+      style={{ "--canvas-bg": project.map.background, "--canvas-fg": canvasFg, "--canvas-muted": canvasMuted } as React.CSSProperties}
       tabIndex={0}
       onKeyDown={(event) => {
         if (event.key === "0") fitToScreen();
@@ -296,7 +298,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
         className="absolute inset-0 size-full"
         onPointerDown={(event) => {
           if (event.target !== event.currentTarget) return;
-          clearSelection();
+          selectObject("terrain-context");
           event.currentTarget.setPointerCapture(event.pointerId);
           setPanning({
             clientX: event.clientX,
@@ -443,12 +445,12 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
                 {sizedLegIcon ? (
                   <>
                     <rect x="-20" y="-20" width="40" height="40" rx="8" fill="transparent" stroke="transparent" />
-                    <g transform={`translate(-12 -12)`} fill="var(--foreground)" color="var(--foreground)" pointerEvents="none" dangerouslySetInnerHTML={{ __html: sizedLegIcon }} />
+                    <g transform={`translate(-12 -12)`} fill="var(--canvas-fg, var(--foreground))" color="var(--canvas-fg, var(--foreground))" pointerEvents="none" dangerouslySetInnerHTML={{ __html: sizedLegIcon }} />
                   </>
                 ) : (
                   <>
-                    <rect x="-34" y="-10" width="68" height="20" rx="10" fill="var(--muted)" stroke={leg.style.color} />
-                    <text textAnchor="middle" y="3" fill="var(--foreground)" fontSize={8 * textScale} fontFamily="monospace" fontWeight="700">
+                    <rect x="-34" y="-10" width="68" height="20" rx="10" fill="var(--canvas-muted, var(--muted))" stroke={leg.style.color} />
+                    <text textAnchor="middle" y="3" fill="var(--canvas-fg, var(--foreground))" fontSize={8 * textScale} fontFamily="monospace" fontWeight="700">
                       {leg.mode.toUpperCase()}
                     </text>
                   </>
@@ -495,16 +497,16 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
               }}
               className="cursor-pointer outline-none"
             >
-              <circle r="13" fill="var(--muted)" stroke="var(--trail)" strokeWidth="2.5" />
+              <circle r="13" fill="var(--canvas-muted, var(--muted))" stroke="var(--canvas-fg, var(--trail))" strokeWidth="2.5" />
               {sizedIcon ? (
-                <g transform="translate(-10 -10)" fill="var(--trail)" color="var(--trail)" dangerouslySetInnerHTML={{ __html: sizedIcon }} />
+                <g transform="translate(-10 -10)" fill="var(--canvas-fg, var(--trail))" color="var(--canvas-fg, var(--trail))" dangerouslySetInnerHTML={{ __html: sizedIcon }} />
               ) : null}
               <g transform={`translate(${labelLayout.x + stop.labelOffset[0]} ${labelLayout.y + stop.labelOffset[1]})`}>
-                <rect x={labelLayout.rectX} y={labelLayout.rectY} width="144" height="34" rx="4" fill="var(--muted)" stroke="var(--muted-foreground)" />
-                <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.nameY} fill="var(--foreground)" fontSize={12 * textScale} fontWeight="700">
+                <rect x={labelLayout.rectX} y={labelLayout.rectY} width="144" height="34" rx="4" fill="var(--canvas-muted, var(--muted))" stroke="var(--canvas-fg, var(--muted-foreground))" />
+                <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.nameY} fill="var(--canvas-fg, var(--foreground))" fontSize={12 * textScale} fontWeight="700">
                   {stop.name}
                 </text>
-                <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.dayY} fill="var(--trail)" fontSize={9 * textScale} fontFamily="monospace" fontWeight="700">
+                <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.dayY} fill="var(--canvas-fg, var(--trail))" fontSize={9 * textScale} fontFamily="monospace" fontWeight="700">
                   {stop.dayLabel}
                 </text>
               </g>
@@ -516,7 +518,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           const svg = getIconSvg(symbol.iconId, project.iconAssets);
           if (!svg) return null;
           const base = symbol.diagramPosition ?? geographicToSymbolic(project, symbol.coordinates);
-          const sizedSvg = sizeIconSvg(svg, { width: 32, height: 32 });
+            const sizedSvg = sizeIconSvg(svg, { width: 32, height: 32, color: canvasFg });
           return (
             <g
               key={symbol.id}
@@ -542,7 +544,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
               placement.coordinates,
               positions,
             );
-            const sizedSvg = sizeIconSvg(svg, { width: 32, height: 32 });
+          const sizedSvg = sizeIconSvg(svg, { width: 32, height: 32, color: canvasFg });
             return (
               <g
                 key={placement.id}
