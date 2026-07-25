@@ -321,6 +321,14 @@ export const useEditorStore = create<EditorState>()(
         }
         if ("elevation" in update) stop.elevation = update.elevation;
         if (update.labelAnchor) stop.labelAnchor = update.labelAnchor;
+        if (update.labelStyle) {
+          if (!stop.labelStyle) stop.labelStyle = {} as typeof stop.labelStyle;
+          Object.assign(stop.labelStyle, update.labelStyle);
+        }
+        if (update.pointStyle) {
+          if (!stop.pointStyle) stop.pointStyle = {} as typeof stop.pointStyle;
+          Object.assign(stop.pointStyle, update.pointStyle);
+        }
       });
     },
     updateTravelLeg: (id, update) => {
