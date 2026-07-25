@@ -25,6 +25,9 @@ export const metadata: Metadata = {
   title: "Mapper | Travel and trail designer",
   description:
     "Design geographic travel itineraries and winding conceptual trails.",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
@@ -39,6 +42,7 @@ export default function RootLayout({
       className={`${atkinson.variable} ${plexMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
         <ThemeProvider>
           <TooltipProvider delayDuration={500}>{children}</TooltipProvider>
         </ThemeProvider>

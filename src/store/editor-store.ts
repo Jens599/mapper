@@ -516,7 +516,7 @@ export const useEditorStore = create<EditorState>()(
     },
     updatePresentation: (key, value) => {
       set((state) => {
-        state.project.presentation[key] = value;
+        (state.project.presentation as Record<string, number | boolean>)[key] = value;
       });
     },
     resetPresentation: () => {
