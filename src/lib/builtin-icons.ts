@@ -7,15 +7,19 @@ export type MapperIcon = {
   svg: string;
 };
 
-export const builtinIcons: MapperIcon[] = iconNames.map((name) => ({
-  id: name,
-  name: name
+export const builtinIcons: MapperIcon[] = iconNames.map((name) => {
+  const id = name;
+  const displayName = name
     .split("-")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" "),
-  pack: "Lucide",
-  svg: _getIconSvg(name, []) ?? "",
-}));
+    .join(" ");
+  return {
+    get id() { return id; },
+    get name() { return displayName; },
+    get pack() { return "Lucide"; },
+    get svg() { return _getIconSvg(id, []) ?? ""; },
+  };
+});
 
 export function getIconSvg(
   iconId: string,

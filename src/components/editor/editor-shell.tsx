@@ -69,6 +69,7 @@ import {
 } from "@/lib/project-io";
 import { useProjectAutosave } from "@/hooks/use-project-autosave";
 import { useEditorStore } from "@/store/editor-store";
+import { preloadIconsAsync } from "@/lib/icons";
 
 function ContourMark() {
   return (
@@ -332,6 +333,7 @@ function TopBar() {
 
 export function EditorShell() {
   useProjectAutosave();
+  useEffect(() => { preloadIconsAsync(); }, []);
   const project = useEditorStore((state) => state.project);
   const selectObject = useEditorStore((state) => state.selectObject);
   const railRef = usePanelRef();
