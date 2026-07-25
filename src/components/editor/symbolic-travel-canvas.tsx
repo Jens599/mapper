@@ -158,6 +158,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const moveSymbolicStop = useEditorStore((state) => state.moveSymbolicStop);
   const moveSymbolicSymbol = useEditorStore((state) => state.moveSymbolicSymbol);
   const updateLegStyle = useEditorStore((state) => state.updateLegStyle);
+  const clearSelection = useEditorStore((state) => state.clearSelection);
   const resetSymbolicLayout = useEditorStore((state) => state.resetSymbolicLayout);
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragging, setDragging] = useState<{
@@ -293,6 +294,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
         className="absolute inset-0 size-full"
         onPointerDown={(event) => {
           if (event.target !== event.currentTarget) return;
+          clearSelection();
           event.currentTarget.setPointerCapture(event.pointerId);
           setPanning({
             clientX: event.clientX,
@@ -402,12 +404,18 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
               y: end.y - ((end.y - cy) / endTangentLength) * 26,
             };
             path = buildSymbolicLegPath(routeStart, { x: cx, y: cy }, routeEnd, leg.style);
-            modeX = (start.x + end.x) / 2 + normalX * (22 + (index % 2) * 12);
-            modeY = (start.y + end.y) / 2 + normalY * (22 + (index % 2) * 12);
+            const bezierMid = {
+              x: 0.25 * routeStart.x + 0.5 * cx + 0.25 * routeEnd.x,
+              y: 0.25 * routeStart.y + 0.5 * cy + 0.25 * routeEnd.y,
+            };
+            modeX = bezierMid.x + normalX * (22 + (index % 2) * 12);
+            modeY = bezierMid.y + normalY * (22 + (index % 2) * 12);
             arrowLabelX = routeEnd.x - normalX * 15;
             arrowLabelY = routeEnd.y - normalY * 15;
           }
           const destinationDay = project.stops.find((stop) => stop.id === leg.to)?.dayLabel;
+          const legIconSvg = leg.iconId ? getIconSvg(leg.iconId, project.iconAssets) : null;
+          const sizedLegIcon = legIconSvg ? sizeIconSvg(legIconSvg, { width: 20, height: 20 }) : null;
           return (
             <g key={leg.id} onClick={() => selectObject(leg.id)} className="cursor-pointer">
               <path d={path} fill="none" stroke="var(--card)" strokeWidth={10 * lineScale} strokeLinecap="round" />
@@ -430,10 +438,16 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
                   selectObject(leg.id);
                 }}
               >
-                <rect x="-34" y="-10" width="68" height="20" rx="10" fill="var(--card)" stroke={leg.style.color} />
-                <text textAnchor="middle" y="3" fill="var(--foreground)" fontSize={8 * textScale} fontFamily="monospace" fontWeight="700">
-                  {leg.mode.toUpperCase()}
-                </text>
+                {sizedLegIcon ? (
+                  <g transform={`translate(-12 -12)`} fill="var(--foreground)" color="var(--foreground)" dangerouslySetInnerHTML={{ __html: sizedLegIcon }} />
+                ) : (
+                  <>
+                    <rect x="-34" y="-10" width="68" height="20" rx="10" fill="var(--card)" stroke={leg.style.color} />
+                    <text textAnchor="middle" y="3" fill="var(--foreground)" fontSize={8 * textScale} fontFamily="monospace" fontWeight="700">
+                      {leg.mode.toUpperCase()}
+                    </text>
+                  </>
+                )}
               </g>
               {leg.showDayLabel && destinationDay ? (
                 <g transform={`translate(${arrowLabelX} ${arrowLabelY})`} pointerEvents="none">
@@ -481,7 +495,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
                 <g transform="translate(-10 -10)" fill="var(--trail)" color="var(--trail)" dangerouslySetInnerHTML={{ __html: sizedIcon }} />
               ) : null}
               <g transform={`translate(${labelLayout.x + stop.labelOffset[0]} ${labelLayout.y + stop.labelOffset[1]})`}>
-                <rect x={labelLayout.rectX} y={labelLayout.rectY} width="144" height="34" rx="4" fill="var(--card)" stroke="#c9d0ca" />
+                <rect x={labelLayout.rectX} y={labelLayout.rectY} width="144" height="34" rx="4" fill="var(--card)" stroke="var(--border)" />
                 <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.nameY} fill="var(--foreground)" fontSize={12 * textScale} fontWeight="700">
                   {stop.name}
                 </text>

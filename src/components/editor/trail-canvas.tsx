@@ -13,6 +13,7 @@ export function TrailCanvas() {
   const project = useEditorStore((state) => state.project);
   const selectObject = useEditorStore((state) => state.selectObject);
   const moveTrailObject = useEditorStore((state) => state.moveTrailObject);
+  const clearSelection = useEditorStore((state) => state.clearSelection);
   const [zoom, setZoom] = useState(1);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -57,6 +58,9 @@ export function TrailCanvas() {
         aria-labelledby="trail-title trail-description"
         viewBox={`${viewX} ${viewY} ${viewWidth} ${viewHeight}`}
         className="absolute inset-0 size-full"
+        onPointerDown={(event) => {
+          if (event.target === event.currentTarget) clearSelection();
+        }}
         onPointerMove={(event) => {
           if (!draggingId) return;
           const point = pointerPosition(event);
