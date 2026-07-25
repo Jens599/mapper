@@ -161,6 +161,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const clearSelection = useEditorStore((state) => state.clearSelection);
   const resetSymbolicLayout = useEditorStore((state) => state.resetSymbolicLayout);
   const svgRef = useRef<SVGSVGElement>(null);
+  const [titleVisible, setTitleVisible] = useState(true);
   const [dragging, setDragging] = useState<{
     id: string;
     type: "stop" | "symbol" | "curve";
@@ -278,6 +279,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
       aria-label="No map travel itinerary"
       data-export-root
       className="canvas-grid relative min-h-0 flex-1 overflow-hidden outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/60"
+      style={{ "--canvas-bg": project.map.background } as React.CSSProperties}
       tabIndex={0}
       onKeyDown={(event) => {
         if (event.key === "0") fitToScreen();
@@ -439,10 +441,13 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
                 }}
               >
                 {sizedLegIcon ? (
-                  <g transform={`translate(-12 -12)`} fill="var(--foreground)" color="var(--foreground)" dangerouslySetInnerHTML={{ __html: sizedLegIcon }} />
+                  <>
+                    <rect x="-20" y="-20" width="40" height="40" rx="8" fill="transparent" stroke="transparent" />
+                    <g transform={`translate(-12 -12)`} fill="var(--foreground)" color="var(--foreground)" pointerEvents="none" dangerouslySetInnerHTML={{ __html: sizedLegIcon }} />
+                  </>
                 ) : (
                   <>
-                    <rect x="-34" y="-10" width="68" height="20" rx="10" fill="var(--card)" stroke={leg.style.color} />
+                    <rect x="-34" y="-10" width="68" height="20" rx="10" fill="var(--muted)" stroke={leg.style.color} />
                     <text textAnchor="middle" y="3" fill="var(--foreground)" fontSize={8 * textScale} fontFamily="monospace" fontWeight="700">
                       {leg.mode.toUpperCase()}
                     </text>
@@ -451,7 +456,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
               </g>
               {leg.showDayLabel && destinationDay ? (
                 <g transform={`translate(${arrowLabelX} ${arrowLabelY})`} pointerEvents="none">
-                  <rect x="-25" y="-9" width="50" height="16" rx="8" fill="var(--card)" stroke={leg.style.color} />
+                  <rect x="-25" y="-9" width="50" height="16" rx="8" fill="var(--muted)" stroke={leg.style.color} />
                   <text textAnchor="middle" y="2.5" fill={leg.style.color} fontSize={7 * textScale} fontFamily="monospace" fontWeight="700">{destinationDay}</text>
                 </g>
               ) : null}
@@ -490,12 +495,12 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
               }}
               className="cursor-pointer outline-none"
             >
-              <circle r="13" fill="var(--card)" stroke="var(--trail)" strokeWidth="2.5" />
+              <circle r="13" fill="var(--muted)" stroke="var(--trail)" strokeWidth="2.5" />
               {sizedIcon ? (
                 <g transform="translate(-10 -10)" fill="var(--trail)" color="var(--trail)" dangerouslySetInnerHTML={{ __html: sizedIcon }} />
               ) : null}
               <g transform={`translate(${labelLayout.x + stop.labelOffset[0]} ${labelLayout.y + stop.labelOffset[1]})`}>
-                <rect x={labelLayout.rectX} y={labelLayout.rectY} width="144" height="34" rx="4" fill="var(--card)" stroke="var(--border)" />
+                <rect x={labelLayout.rectX} y={labelLayout.rectY} width="144" height="34" rx="4" fill="var(--muted)" stroke="var(--muted-foreground)" />
                 <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.nameY} fill="var(--foreground)" fontSize={12 * textScale} fontWeight="700">
                   {stop.name}
                 </text>
@@ -551,12 +556,31 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
         )}
       </svg>
 
-      <div className="pointer-events-none absolute left-4 top-4 border-l-4 border-trail bg-popover/94 px-4 py-3 shadow-md">
-        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
-          No map itinerary · not to scale
-        </p>
-        <h2 className="text-lg font-extrabold tracking-tight">{project.name}</h2>
-      </div>
+      {titleVisible ? (
+        <div className="pointer-events-none absolute left-4 top-4 border-l-4 border-trail bg-popover/94 px-4 py-3 shadow-md">
+          <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+            No map itinerary · not to scale
+          </p>
+          <h2 className="text-lg font-extrabold tracking-tight">{project.name}</h2>
+          <button
+            type="button"
+            onClick={() => setTitleVisible(false)}
+            className="pointer-events-auto absolute -right-2 -top-2 flex size-5 items-center justify-center rounded-full bg-popover text-[10px] text-muted-foreground shadow-sm hover:text-foreground"
+            aria-label="Hide title"
+          >
+            ✕
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setTitleVisible(true)}
+          className="pointer-events-auto absolute left-4 top-4 z-10 flex size-7 items-center justify-center rounded-md border bg-popover/80 text-xs text-muted-foreground shadow-sm hover:text-foreground"
+          aria-label="Show title"
+        >
+          +
+        </button>
+      )}
 
       <div className="absolute right-4 top-4 flex items-center rounded-md border bg-popover/95 p-1 shadow-sm">
         <Button variant="ghost" size="icon-sm" onClick={() => changeZoom(viewport.zoom - 0.15)} aria-label="Zoom out"><Minus aria-hidden="true" /></Button>

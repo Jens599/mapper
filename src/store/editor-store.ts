@@ -110,6 +110,7 @@ type EditorState = {
    moveSymbolicSymbol: (id: string, position: { x: number; y: number }) => void;
    moveTrailObject: (id: string, position: { x: number; y: number }) => void;
    moveTravelLegControl: (legId: string, curvature: number) => void;
+   setMapBackground: (color: string) => void;
  };
 
 export const useEditorStore = create<EditorState>()(
@@ -335,7 +336,17 @@ export const useEditorStore = create<EditorState>()(
         leg.from = from;
         leg.to = to;
         leg.loopback = loopback;
-        if (update.mode) leg.mode = update.mode;
+        if (update.mode) {
+          leg.mode = update.mode;
+          const modeIcons: Record<string, string> = {
+            walk: "carbon-tree",
+            drive: "carbon-hotel",
+            flight: "carbon-airport",
+            train: "carbon-restaurant",
+            boat: "carbon-campsite",
+          };
+          leg.iconId = modeIcons[update.mode] ?? leg.iconId;
+        }
         if (update.showDayLabel !== undefined) leg.showDayLabel = update.showDayLabel;
       });
     },
@@ -628,6 +639,11 @@ export const useEditorStore = create<EditorState>()(
           visible: true,
         });
         state.selectedObjectId = id;
+      });
+    },
+    setMapBackground: (color) => {
+      set((state) => {
+        if (state.project.kind === "travel") state.project.map.background = color;
       });
     },
   })),

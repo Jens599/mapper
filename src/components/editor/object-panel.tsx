@@ -518,6 +518,7 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
   const toggleHillshade = useEditorStore((state) => state.toggleHillshade);
   const setTravelDisplay = useEditorStore((state) => state.setTravelDisplay);
   const setMapStyle = useEditorStore((state) => state.setMapStyle);
+  const setMapBackground = useEditorStore((state) => state.setMapBackground);
   const updatePresentation = useEditorStore((state) => state.updatePresentation);
   const resetPresentation = useEditorStore((state) => state.resetPresentation);
   const presentation = useEditorStore((state) => state.project.presentation);
@@ -554,6 +555,29 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
         >
           No map
         </Button>
+      </div>
+      <div className="grid gap-1.5" style={{ display: mapSettings.display === "symbolic" ? "" : "none" }}>
+        <Label>Background</Label>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { label: "Canvas", value: "#e9efeb" },
+            { label: "Paper", value: "#f5f0e8" },
+            { label: "Slate", value: "#d6dce4" },
+            { label: "Sand", value: "#ede0c8" },
+            { label: "Moss", value: "#dce3d4" },
+            { label: "Dusk", value: "#c8d0d8" },
+          ].map((preset) => (
+            <button
+              key={preset.value}
+              type="button"
+              title={preset.label}
+              className="size-7 cursor-pointer rounded-full border border-border/60"
+              style={{ backgroundColor: preset.value }}
+              onClick={() => setMapBackground(preset.value)}
+              aria-label={preset.label}
+            />
+          ))}
+        </div>
       </div>
       <div className="grid gap-1.5">
         <Label htmlFor={`${idPrefix}basemap-style`}>OpenStreetMap style</Label>

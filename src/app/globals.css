@@ -141,7 +141,7 @@
 
 @layer utilities {
   .canvas-grid {
-    background-color: var(--canvas);
+    background-color: var(--canvas-bg, var(--canvas));
     background-image:
       linear-gradient(to right, color-mix(in srgb, var(--foreground) 7%, transparent) 1px, transparent 1px),
       linear-gradient(to bottom, color-mix(in srgb, var(--foreground) 7%, transparent) 1px, transparent 1px);

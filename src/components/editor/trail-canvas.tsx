@@ -15,6 +15,7 @@ export function TrailCanvas() {
   const moveTrailObject = useEditorStore((state) => state.moveTrailObject);
   const clearSelection = useEditorStore((state) => state.clearSelection);
   const [zoom, setZoom] = useState(1);
+  const [titleVisible, setTitleVisible] = useState(true);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -203,12 +204,31 @@ export function TrailCanvas() {
         )}
       </svg>
 
-      <div className="pointer-events-none absolute left-4 top-4 border-l-4 border-trail bg-popover/94 px-4 py-3 shadow-md backdrop-blur-sm">
-        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
-          Conceptual trail sketch
-        </p>
-        <h2 className="text-lg font-extrabold tracking-tight">{project.name}</h2>
-      </div>
+      {titleVisible ? (
+        <div className="pointer-events-none absolute left-4 top-4 border-l-4 border-trail bg-popover/94 px-4 py-3 shadow-md backdrop-blur-sm">
+          <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+            Conceptual trail sketch
+          </p>
+          <h2 className="text-lg font-extrabold tracking-tight">{project.name}</h2>
+          <button
+            type="button"
+            onClick={() => setTitleVisible(false)}
+            className="pointer-events-auto absolute -right-2 -top-2 flex size-5 items-center justify-center rounded-full bg-popover text-[10px] text-muted-foreground shadow-sm hover:text-foreground"
+            aria-label="Hide title"
+          >
+            ✕
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setTitleVisible(true)}
+          className="pointer-events-auto absolute left-4 top-4 z-10 flex size-7 items-center justify-center rounded-md border bg-popover/80 text-xs text-muted-foreground shadow-sm hover:text-foreground"
+          aria-label="Show title"
+        >
+          +
+        </button>
+      )}
 
       <div className="absolute right-4 top-4 flex items-center rounded-md border bg-popover/95 p-1 shadow-sm">
         <Button

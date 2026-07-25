@@ -445,6 +445,7 @@ export function MapCanvas() {
   const [ready, setReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(7.2);
+  const [titleVisible, setTitleVisible] = useState(true);
   const project = useEditorStore((state) => state.project);
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
   const selectObject = useEditorStore((state) => state.selectObject);
@@ -825,17 +826,36 @@ export function MapCanvas() {
     >
       <div ref={containerRef} className="mapper-map" />
 
-      <div className="pointer-events-none absolute left-4 top-4 z-10 max-w-[calc(100%-7rem)] border-l-4 border-trail bg-popover/94 px-4 py-3 shadow-md backdrop-blur-sm">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-          {travelProject.durationDays} day journey
-        </p>
-        <h2 className="truncate text-base font-extrabold tracking-tight sm:text-lg">
-          {travelProject.name}
-        </h2>
-        <p className="hidden truncate text-xs text-muted-foreground sm:block">
-          {travelProject.subtitle}
-        </p>
-      </div>
+      {titleVisible ? (
+        <div className="pointer-events-none absolute left-4 top-4 z-10 max-w-[calc(100%-7rem)] border-l-4 border-trail bg-popover/94 px-4 py-3 shadow-md backdrop-blur-sm">
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+            {travelProject.durationDays} day journey
+          </p>
+          <h2 className="truncate text-base font-extrabold tracking-tight sm:text-lg">
+            {travelProject.name}
+          </h2>
+          <p className="hidden truncate text-xs text-muted-foreground sm:block">
+            {travelProject.subtitle}
+          </p>
+          <button
+            type="button"
+            onClick={() => setTitleVisible(false)}
+            className="pointer-events-auto absolute -right-2 -top-2 flex size-5 items-center justify-center rounded-full bg-popover text-[10px] text-muted-foreground shadow-sm hover:text-foreground"
+            aria-label="Hide title"
+          >
+            ✕
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setTitleVisible(true)}
+          className="pointer-events-auto absolute left-4 top-4 z-10 flex size-7 items-center justify-center rounded-md border bg-popover/80 text-xs text-muted-foreground shadow-sm hover:text-foreground"
+          aria-label="Show title"
+        >
+          +
+        </button>
+      )}
 
       {!ready && !mapError ? (
         <div className="absolute inset-0 grid place-items-center bg-canvas/85">

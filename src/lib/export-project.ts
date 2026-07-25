@@ -172,7 +172,7 @@ export async function exportPng(project: MapperProject) {
   const dataUrl = await toPng(root, {
     pixelRatio: 2,
     cacheBust: true,
-    backgroundColor: project.kind === "trail" ? project.canvas.background : "#e9efeb",
+    backgroundColor: project.kind === "trail" ? project.canvas.background : project.map.background,
   });
   const response = await fetch(dataUrl);
   downloadBlob(await response.blob(), `${safeFilename(project.name)}.png`);
