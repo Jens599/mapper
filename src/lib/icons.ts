@@ -146,3 +146,7 @@ export function getIconIds(): string[] {
     "material-settings",
   ];
 }
+
+export const iconPack = "Lucide";
+
+export const iconNames = Object.keys(iconSvg);
