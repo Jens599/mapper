@@ -340,6 +340,47 @@ function StopProperties({
           </SelectContent>
         </Select>
       </div>
+      <p className="border-l-2 border-water pl-3 text-xs leading-5 text-muted-foreground">
+        Point style
+      </p>
+      <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
+        Background fill
+        <Switch checked={stop.pointStyle.showFill} onCheckedChange={(checked) => updateTravelStop(stop.id, { pointStyle: { ...stop.pointStyle, showFill: checked } })} />
+      </label>
+      {stop.pointStyle.showFill ? (
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}point-fill`}>Fill color</Label>
+        <div className="flex items-center gap-2">
+          <input
+            id={`${idPrefix}point-fill`}
+            type="color"
+            value={stop.pointStyle.fill}
+            onChange={(event) => updateTravelStop(stop.id, { pointStyle: { ...stop.pointStyle, fill: event.currentTarget.value } })}
+            className="size-8 cursor-pointer rounded border bg-transparent p-0.5"
+          />
+          <span className="font-mono text-xs text-muted-foreground">{stop.pointStyle.fill}</span>
+        </div>
+      </div>
+      ) : null}
+      <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
+        Border stroke
+        <Switch checked={stop.pointStyle.showStroke} onCheckedChange={(checked) => updateTravelStop(stop.id, { pointStyle: { ...stop.pointStyle, showStroke: checked } })} />
+      </label>
+      {stop.pointStyle.showStroke ? (
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}point-stroke`}>Stroke color</Label>
+        <div className="flex items-center gap-2">
+          <input
+            id={`${idPrefix}point-stroke`}
+            type="color"
+            value={stop.pointStyle.stroke}
+            onChange={(event) => updateTravelStop(stop.id, { pointStyle: { ...stop.pointStyle, stroke: event.currentTarget.value } })}
+            className="size-8 cursor-pointer rounded border bg-transparent p-0.5"
+          />
+          <span className="font-mono text-xs text-muted-foreground">{stop.pointStyle.stroke}</span>
+        </div>
+      </div>
+      ) : null}
       <div className="grid gap-1.5">
         <Label htmlFor={`${idPrefix}label-anchor`}>Tag alignment</Label>
         <Select value={stop.labelAnchor} onValueChange={(value) => value && updateTravelStop(stop.id, { labelAnchor: value as TravelStop["labelAnchor"] })}>

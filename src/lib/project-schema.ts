@@ -19,12 +19,19 @@ export const stopSchema = z.object({
    elevation: z.number().finite().optional(),
    labelOffset: z.tuple([z.number().min(-300).max(300), z.number().min(-300).max(300)]).default([0, 0]),
    labelAnchor: z.enum(["auto", "top", "right", "bottom", "left"]).default("auto"),
-   labelStyle: z.object({
-     fontSize: z.number().min(0.5).max(3).default(1),
-     color: z.string().regex(/^#[0-9a-f]{6}$/i).default("#18221d"),
-     bold: z.boolean().default(true),
-   }).default({ fontSize: 1, color: "#18221d", bold: true }),
-   diagramPosition: z
+    labelStyle: z.object({
+      fontSize: z.number().min(0.5).max(3).default(1),
+      color: z.string().regex(/^#[0-9a-f]{6}$/i).default("#18221d"),
+      bold: z.boolean().default(true),
+    }).default({ fontSize: 1, color: "#18221d", bold: true }),
+    pointStyle: z.object({
+      fill: z.string().regex(/^#[0-9a-f]{6}$/i).default("#e9efeb"),
+      showFill: z.boolean().default(true),
+      stroke: z.string().regex(/^#[0-9a-f]{6}$/i).default("#18221d"),
+      showStroke: z.boolean().default(true),
+      strokeWidth: z.number().min(0).max(10).default(2.5),
+    }).default({ fill: "#e9efeb", showFill: true, stroke: "#18221d", showStroke: true, strokeWidth: 2.5 }),
+    diagramPosition: z
      .object({ x: z.number().finite(), y: z.number().finite() })
      .optional(),
    visible: z.boolean().default(true),

@@ -44,7 +44,7 @@ export type NewTravelLeg = {
  };
 
 export type TravelStopUpdate = Partial<
-  Pick<TravelProject["stops"][number], "name" | "dayLabel" | "coordinates" | "elevation" | "labelAnchor" | "labelStyle">
+  Pick<TravelProject["stops"][number], "name" | "dayLabel" | "coordinates" | "elevation" | "labelAnchor" | "labelStyle" | "pointStyle">
 >;
 
 export type TravelLegUpdate = Partial<
@@ -264,6 +264,7 @@ export const useEditorStore = create<EditorState>()(
           labelOffset: [0, 0],
           labelAnchor: "auto",
           labelStyle: { fontSize: 1, color: "#18221d", bold: true },
+          pointStyle: { fill: "#e9efeb", showFill: true, stroke: "#18221d", showStroke: true, strokeWidth: 2.5 },
           visible: true,
         });
         state.selectedObjectId = id;

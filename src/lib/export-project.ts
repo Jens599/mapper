@@ -87,7 +87,11 @@ function buildTravelOverlaySvg(project: TravelProject) {
           : anchor === "left"
             ? { x: -16, nameY: -5, dayY: 13, align: "end" }
             : { x: 16, nameY: -5, dayY: 13, align: "start" };
-      return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)})"><circle r="12" fill="#f8faf8" stroke="#ad4a24" stroke-width="2.5"/>${iconSvg}<g transform="translate(${stop.labelOffset[0]} ${stop.labelOffset[1]})"><text x="${label.x}" y="${label.nameY}" text-anchor="${label.align}" font-family="sans-serif" font-size="${14 * project.presentation.textScale}" font-weight="700" fill="#18221d">${escapeXml(stop.name)}</text><text x="${label.x}" y="${label.dayY}" text-anchor="${label.align}" font-family="monospace" font-size="${10 * project.presentation.textScale}" font-weight="600" fill="#99401f">${escapeXml(stop.dayLabel)}</text></g></g>`;
+      const ps = stop.pointStyle ?? {};
+      const fill = ps.showFill === false ? "none" : ps.fill ?? "#f8faf8";
+      const stroke = ps.showStroke === false ? "none" : ps.stroke ?? "#ad4a24";
+      const sw = ps.strokeWidth ?? 2.5;
+      return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)})"><circle r="12" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>${iconSvg}<g transform="translate(${stop.labelOffset[0]} ${stop.labelOffset[1]})"><text x="${label.x}" y="${label.nameY}" text-anchor="${label.align}" font-family="sans-serif" font-size="${14 * project.presentation.textScale}" font-weight="700" fill="#18221d">${escapeXml(stop.name)}</text><text x="${label.x}" y="${label.dayY}" text-anchor="${label.align}" font-family="monospace" font-size="${10 * project.presentation.textScale}" font-weight="600" fill="#99401f">${escapeXml(stop.dayLabel)}</text></g></g>`;
     })
     .join("");
   const symbols = project.symbols

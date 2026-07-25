@@ -505,7 +505,11 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
               }}
               className="cursor-pointer outline-none"
             >
-              <circle r="13" fill="var(--canvas-muted, var(--muted))" stroke="var(--canvas-fg, var(--trail))" strokeWidth="2.5" />
+              {stop.pointStyle?.showFill !== false ? (
+              <circle r="13" fill={stop.pointStyle?.fill ?? "var(--canvas-muted, var(--muted))"} stroke={stop.pointStyle?.showStroke === false ? "none" : stop.pointStyle?.stroke ?? "var(--canvas-fg, var(--trail))"} strokeWidth={stop.pointStyle?.strokeWidth ?? 2.5} />
+              ) : stop.pointStyle?.showStroke !== false ? (
+              <circle r="13" fill="none" stroke={stop.pointStyle?.stroke ?? "var(--canvas-fg, var(--trail))"} strokeWidth={stop.pointStyle?.strokeWidth ?? 2.5} />
+              ) : null}
               {sizedIcon ? (
                 <g transform="translate(-10 -10)" fill="var(--canvas-fg, var(--trail))" color="var(--canvas-fg, var(--trail))" dangerouslySetInnerHTML={{ __html: sizedIcon }} />
               ) : null}
