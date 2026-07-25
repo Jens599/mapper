@@ -140,17 +140,20 @@ export function getIconIds(): string[] {
 
 export const iconPack = "Lucide";
 
-export const preloadIcons = [...new Set([
-  ...Object.values(iconAliases),
-  ...Object.values(legacyPointIcons),
-  "map-pin", "compass", "landmark", "route", "flag", "binoculars",
-  "backpack", "sun", "moon", "star", "cloud-sun", "mountain-snow",
-  "anchor", "trophy", "camera", "heart", "eye", "info",
-  "settings", "menu", "search", "signpost", "trees", "leaf", "flame",
-  "sunrise", "sunset", "cloud-drizzle", "cloud-lightning", "cloud-snow",
-  "arrow-right", "arrow-left", "arrow-up", "arrow-down", "clock",
-  "message-circle", "sailboat", "ship",
-]];
+export const preloadIcons = (() => {
+  const s = new Set([
+    ...Object.values(iconAliases),
+    ...Object.values(legacyPointIcons),
+    "map-pin", "compass", "landmark", "route", "flag", "binoculars",
+    "backpack", "sun", "moon", "star", "cloud-sun", "mountain-snow",
+    "anchor", "trophy", "camera", "heart", "eye", "info",
+    "settings", "menu", "search", "signpost", "trees", "leaf", "flame",
+    "sunrise", "sunset", "cloud-drizzle", "cloud-lightning", "cloud-snow",
+    "arrow-right", "arrow-left", "arrow-up", "arrow-down", "clock",
+    "message-circle", "sailboat", "ship",
+  ]);
+  return [...s];
+})();
 
 let loadingPromise: Promise<void> | null = null;
 
