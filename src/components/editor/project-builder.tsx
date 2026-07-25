@@ -41,8 +41,9 @@ const mapperCompletions = [
   "version", "kind", "id", "name", "durationDays", "subtitle", "presentation",
   "lineScale", "textScale", "symbolScale", "map", "display", "style",
   "showContours", "showHillshade", "contourInterval", "elevationUnits", "stops",
-  "coordinates", "dayLabel", "icon", "elevation", "labelOffset", "legs", "from",
-  "to", "mode", "via", "line", "solid", "dashed", "dotted", "curvature", "winding",
+  "coordinates", "dayLabel", "icon", "elevation", "labelOffset", "labelAnchor",
+  "labelStyle", "fontSize", "bold", "legs", "from",
+  "to", "mode", "loopback", "showDayLabel", "iconId", "via", "line", "solid", "dashed", "dotted", "curvature", "winding",
   "noiseSeed", "noiseAmplitude", "noiseScale", "noiseOctaves", "noiseModulation", "color", "iconAssets",
   "symbols", "scatter", "seed", "count", "minSpacingKm", "minSpacing", "region",
   "type", "trip-bounds", "map-edge", "north", "south", "east", "west",
@@ -239,6 +240,7 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
         >
           <DialogTitle className="sr-only">Project builder</DialogTitle>
           <DialogDescription className="sr-only">Edit and validate the active project YAML.</DialogDescription>
+          {fullscreen ? workspace : (
           <ResizablePanelGroup orientation="horizontal" className="size-full">
             <ResizablePanel defaultSize="50%" minSize="0%" className="pointer-events-none" />
             <ResizableHandle withHandle className="pointer-events-auto bg-[#454545]" onDoubleClick={showHalfScreen} />
@@ -246,12 +248,13 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
               panelRef={editorPanelRef}
               defaultSize="50%"
               minSize="30%"
-              maxSize={fullscreen ? "100%" : "80%"}
+              maxSize="80%"
               className="pointer-events-auto shadow-[-10px_0_30px_rgba(0,0,0,0.22)]"
             >
               {workspace}
             </ResizablePanel>
           </ResizablePanelGroup>
+          )}
         </DialogContent>
       </Dialog>
       <Drawer open={open && !desktop} onOpenChange={setOpen} direction="bottom">

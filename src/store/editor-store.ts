@@ -13,6 +13,8 @@ import type {
   TrailNoise,
   TrailProject,
   TravelProject,
+  TravelStop,
+  TravelLeg,
 } from "@/lib/project-schema";
 
 export type ScatterOptions = {
@@ -33,96 +35,144 @@ export type NewTravelStop = {
 };
 
 export type NewTravelLeg = {
-  name: string;
-  from: string;
-  to: string;
-  mode: TravelProject["legs"][number]["mode"];
-};
+   name: string;
+   from: string;
+   to: string;
+   mode: TravelProject["legs"][number]["mode"];
+   loopback?: boolean;
+   iconId?: string;
+ };
+
+export type TravelStopUpdate = Partial<
+  Pick<TravelProject["stops"][number], "name" | "dayLabel" | "coordinates" | "elevation" | "labelAnchor" | "labelStyle">
+>;
+
+export type TravelLegUpdate = Partial<
+  Pick<TravelProject["legs"][number], "name" | "from" | "to" | "mode" | "loopback" | "showDayLabel">
+>;
 
 type EditorState = {
-  project: MapperProject;
-  travelProject: TravelProject;
-  trailProject: TrailProject;
-  selectedObjectId: string | null;
-  selectedIconId: string;
-  switchProjectMode: (kind: MapperProject["kind"]) => void;
-  replaceProject: (project: MapperProject) => void;
-  selectObject: (id: string) => void;
-  toggleObjectVisibility: (id: string) => void;
-  toggleContours: () => void;
-  toggleHillshade: () => void;
-  setTravelDisplay: (display: "geographic" | "symbolic") => void;
-  setMapStyle: (style: TravelProject["map"]["style"]) => void;
-  addTravelStop: (stop: NewTravelStop) => void;
-  addTravelLeg: (leg: NewTravelLeg) => void;
-  updateLegStyle: <Key extends keyof LegStyle>(
-    legId: string,
-    key: Key,
-    value: LegStyle[Key],
-  ) => void;
-  applyLegShapeToAll: (legId: string) => void;
-  updatePointIcon: (id: string, iconId: string | null) => void;
-  updateTrailNoise: <Key extends keyof TrailNoise>(
-    routeId: string,
-    key: Key,
-    value: TrailNoise[Key],
-  ) => void;
-  selectIcon: (iconId: string) => void;
-  addIconAssets: (assets: IconAsset[]) => void;
-  placeSelectedIcon: () => void;
-  scatterSelectedIcon: (options: ScatterOptions) => void;
-  updateSymbolTransform: (
-    id: string,
-    key: "scale" | "rotation",
-    value: number,
-  ) => void;
-  updatePresentation: (
-    key: keyof PresentationSettings,
-    value: number,
-  ) => void;
-  resetPresentation: () => void;
-  resetSymbolicLayout: () => void;
-  updateStopLabelOffset: (id: string, axis: 0 | 1, value: number) => void;
-  moveTravelStop: (id: string, coordinates: [number, number]) => void;
-  moveTravelSymbol: (id: string, coordinates: [number, number]) => void;
-  moveSymbolicStop: (id: string, position: { x: number; y: number }) => void;
-  moveSymbolicSymbol: (id: string, position: { x: number; y: number }) => void;
-  moveTrailObject: (id: string, position: { x: number; y: number }) => void;
-};
+   project: MapperProject;
+   travelProject: TravelProject;
+   trailProject: TrailProject;
+   selectedObjectId: string | null;
+   selectedIds: string[];
+   selectedIconId: string;
+   switchProjectMode: (kind: MapperProject["kind"]) => void;
+   replaceProject: (project: MapperProject) => void;
+   selectObject: (id: string) => void;
+   selectObjects: (ids: string[]) => void;
+   toggleObjectSelection: (id: string) => void;
+   clearSelection: () => void;
+   toggleObjectVisibility: (id: string) => void;
+   toggleContours: () => void;
+   toggleHillshade: () => void;
+   setTravelDisplay: (display: "geographic" | "symbolic") => void;
+   setMapStyle: (style: TravelProject["map"]["style"]) => void;
+   addTravelStop: (stop: NewTravelStop) => void;
+   addTravelLeg: (leg: NewTravelLeg) => void;
+   updateTravelStop: (id: string, update: TravelStopUpdate) => void;
+   updateTravelLeg: (id: string, update: TravelLegUpdate) => void;
+    updateLegIcon: (legId: string, iconId: string | undefined) => void;
+   updateLegStyle: <Key extends keyof LegStyle>(
+     legId: string,
+     key: Key,
+     value: LegStyle[Key],
+   ) => void;
+   applyLegShapeToAll: (legId: string) => void;
+   updatePointIcon: (id: string, iconId: string | null) => void;
+   updateTrailNoise: <Key extends keyof TrailNoise>(
+     routeId: string,
+     key: Key,
+     value: TrailNoise[Key],
+   ) => void;
+   selectIcon: (iconId: string) => void;
+   addIconAssets: (assets: IconAsset[]) => void;
+   placeSelectedIcon: () => void;
+   placePOISymbol: (coordinates: [number, number]) => void;
+   scatterSelectedIcon: (options: ScatterOptions) => void;
+   updateSymbolTransform: (
+     id: string,
+     key: "scale" | "rotation",
+     value: number,
+   ) => void;
+   updatePresentation: (
+     key: keyof PresentationSettings,
+     value: number,
+   ) => void;
+   resetPresentation: () => void;
+   resetSymbolicLayout: () => void;
+   updateStopLabelOffset: (id: string, axis: 0 | 1, value: number) => void;
+   updateStopLabelStyle: (id: string, key: keyof NonNullable<TravelStop["labelStyle"]>, value: number | string | boolean) => void;
+   moveTravelStop: (id: string, coordinates: [number, number]) => void;
+   moveTravelSymbol: (id: string, coordinates: [number, number]) => void;
+   moveSymbolicStop: (id: string, position: { x: number; y: number }) => void;
+   moveSymbolicSymbol: (id: string, position: { x: number; y: number }) => void;
+   moveTrailObject: (id: string, position: { x: number; y: number }) => void;
+   moveTravelLegControl: (legId: string, curvature: number) => void;
+ };
 
 export const useEditorStore = create<EditorState>()(
-  immer((set) => ({
-    project: sampleProject,
-    travelProject: sampleProject,
-    trailProject: sampleTrailProject,
-    selectedObjectId: "leg-kathmandu-pokhara",
-    selectedIconId: "carbon-mountain",
-    switchProjectMode: (kind) => {
-      set((state) => {
-        if (state.project.kind === kind) return;
-        if (state.project.kind === "travel") state.travelProject = state.project;
-        else state.trailProject = state.project;
-        state.project = kind === "travel" ? state.travelProject : state.trailProject;
-        state.selectedObjectId =
-          kind === "travel" ? "leg-kathmandu-pokhara" : "ridge-route";
-      });
-    },
-    replaceProject: (project) => {
-      set((state) => {
-        state.project = project;
-        if (project.kind === "travel") state.travelProject = project;
-        else state.trailProject = project;
-        state.selectedObjectId =
-          project.kind === "travel"
-            ? (project.legs[0]?.id ?? project.stops[0]?.id ?? null)
-            : (project.routes[0]?.id ?? project.waypoints[0]?.id ?? null);
-      });
-    },
-    selectObject: (id) => {
-      set((state) => {
-        state.selectedObjectId = id;
-      });
-    },
+   immer((set) => ({
+     project: sampleProject,
+     travelProject: sampleProject,
+     trailProject: sampleTrailProject,
+     selectedObjectId: "leg-kathmandu-pokhara",
+     selectedIds: [],
+     selectedIconId: "carbon-mountain",
+     switchProjectMode: (kind) => {
+       set((state) => {
+         if (state.project.kind === kind) return;
+         if (state.project.kind === "travel") state.travelProject = state.project;
+         else state.trailProject = state.project;
+         state.project = kind === "travel" ? state.travelProject : state.trailProject;
+         state.selectedObjectId =
+           kind === "travel" ? "leg-kathmandu-pokhara" : "ridge-route";
+         state.selectedIds = [];
+       });
+     },
+     replaceProject: (project) => {
+       set((state) => {
+         state.project = project;
+         if (project.kind === "travel") state.travelProject = project;
+         else state.trailProject = project;
+         state.selectedObjectId =
+           project.kind === "travel"
+             ? (project.legs[0]?.id ?? project.stops[0]?.id ?? null)
+             : (project.routes[0]?.id ?? project.waypoints[0]?.id ?? null);
+         state.selectedIds = [];
+       });
+     },
+     selectObject: (id) => {
+       set((state) => {
+         state.selectedObjectId = id;
+         state.selectedIds = [id];
+       });
+     },
+     selectObjects: (ids) => {
+       set((state) => {
+         state.selectedIds = ids;
+         state.selectedObjectId = ids[0] ?? null;
+       });
+     },
+     toggleObjectSelection: (id) => {
+       set((state) => {
+         const idx = state.selectedIds.indexOf(id);
+         if (idx >= 0) {
+           state.selectedIds.splice(idx, 1);
+           state.selectedObjectId = state.selectedIds[0] ?? null;
+         } else {
+           state.selectedIds.push(id);
+           state.selectedObjectId = id;
+         }
+       });
+     },
+     clearSelection: () => {
+       set((state) => {
+         state.selectedIds = [];
+         state.selectedObjectId = null;
+       });
+     },
     toggleObjectVisibility: (id) => {
       set((state) => {
         if (state.project.kind === "travel") {
@@ -211,6 +261,8 @@ export const useEditorStore = create<EditorState>()(
           ],
           icon: "carbon-hotel",
           labelOffset: [0, 0],
+          labelAnchor: "auto",
+          labelStyle: { fontSize: 1, color: "#18221d", bold: true },
           visible: true,
         });
         state.selectedObjectId = id;
@@ -220,33 +272,71 @@ export const useEditorStore = create<EditorState>()(
       set((state) => {
         if (
           state.project.kind !== "travel" ||
-          leg.from === leg.to ||
+          (leg.from === leg.to && !leg.loopback) ||
           !leg.name.trim()
         ) return;
         const stopIds = new Set(state.project.stops.map((stop) => stop.id));
         if (!stopIds.has(leg.from) || !stopIds.has(leg.to)) return;
         const id = `leg-${Date.now()}`;
-        state.project.legs.push({
-          id,
-          name: leg.name.trim().slice(0, 100),
-          from: leg.from,
-          to: leg.to,
-          mode: leg.mode,
-          via: [],
-          style: {
-            line: leg.mode === "drive" || leg.mode === "train" ? "solid" : "dashed",
-            curvature: leg.mode === "flight" ? 0.24 : 0.06,
-            winding: leg.mode === "walk" ? 0.3 : 0,
-            noiseSeed: 42,
-            noiseAmplitude: 0,
-            noiseScale: 2,
-            noiseOctaves: 3,
-            noiseModulation: 0,
-            color: leg.mode === "flight" ? "#216b8b" : leg.mode === "walk" ? "#ad4a24" : "#202b25",
-          },
-          visible: true,
-        });
+         state.project.legs.push({
+           id,
+           name: leg.name.trim().slice(0, 100),
+           from: leg.from,
+           to: leg.to,
+           mode: leg.mode,
+           loopback: Boolean(leg.loopback),
+           showDayLabel: false,
+            iconId: leg.iconId,
+           via: [],
+           style: {
+             line: leg.mode === "drive" || leg.mode === "train" ? "solid" : "dashed",
+             curvature: leg.mode === "flight" ? 0.24 : 0.06,
+             winding: leg.mode === "walk" ? 0.3 : 0,
+             noiseSeed: 42,
+             noiseAmplitude: 0,
+             noiseScale: 2,
+             noiseOctaves: 3,
+             noiseModulation: 0,
+             color: leg.mode === "flight" ? "#216b8b" : leg.mode === "walk" ? "#ad4a24" : "#202b25",
+           },
+           visible: true,
+         });
         state.selectedObjectId = id;
+      });
+    },
+    updateTravelStop: (id, update) => {
+      set((state) => {
+        if (state.project.kind !== "travel") return;
+        const stop = state.project.stops.find((item) => item.id === id);
+        if (!stop) return;
+        if (update.name?.trim()) stop.name = update.name.trim().slice(0, 80);
+        if (update.dayLabel?.trim()) stop.dayLabel = update.dayLabel.trim().slice(0, 24);
+        if (update.coordinates?.every(Number.isFinite)) {
+          stop.coordinates = [
+            ((update.coordinates[0] + 180) % 360 + 360) % 360 - 180,
+            Math.min(90, Math.max(-90, update.coordinates[1])),
+          ];
+        }
+        if ("elevation" in update) stop.elevation = update.elevation;
+        if (update.labelAnchor) stop.labelAnchor = update.labelAnchor;
+      });
+    },
+    updateTravelLeg: (id, update) => {
+      set((state) => {
+        if (state.project.kind !== "travel") return;
+        const leg = state.project.legs.find((item) => item.id === id);
+        if (!leg) return;
+        const from = update.from ?? leg.from;
+        const to = update.to ?? leg.to;
+        const loopback = update.loopback ?? leg.loopback;
+        const stopIds = new Set(state.project.stops.map((stop) => stop.id));
+        if (!stopIds.has(from) || !stopIds.has(to) || (from === to && !loopback)) return;
+        if (update.name?.trim()) leg.name = update.name.trim().slice(0, 100);
+        leg.from = from;
+        leg.to = to;
+        leg.loopback = loopback;
+        if (update.mode) leg.mode = update.mode;
+        if (update.showDayLabel !== undefined) leg.showDayLabel = update.showDayLabel;
       });
     },
     updateLegStyle: (legId, key, value) => {
@@ -493,6 +583,51 @@ export const useEditorStore = create<EditorState>()(
           icon.x = position.x;
           icon.y = position.y;
         }
+      });
+    },
+    moveTravelLegControl: (legId, curvature) => {
+      set((state) => {
+        if (state.project.kind !== "travel") return;
+        const leg = state.project.legs.find((item) => item.id === legId);
+        if (leg) leg.style.curvature = Math.min(10, Math.max(-10, curvature));
+      });
+    },
+    updateLegIcon: (legId, iconId) => {
+      set((state) => {
+        if (state.project.kind !== "travel") return;
+        const leg = state.project.legs.find((item) => item.id === legId);
+        if (!leg) return;
+        if (iconId) leg.iconId = iconId;
+        else delete leg.iconId;
+      });
+    },
+    updateStopLabelStyle: (id, key, value) => {
+      set((state) => {
+        if (state.project.kind !== "travel") return;
+        const stop = state.project.stops.find((item) => item.id === id);
+        if (stop) {
+          if (key === "fontSize") stop.labelStyle.fontSize = value as number;
+          else if (key === "color") stop.labelStyle.color = value as string;
+          else if (key === "bold") stop.labelStyle.bold = value as boolean;
+        }
+      });
+    },
+    placePOISymbol: (coordinates) => {
+      set((state) => {
+        if (state.project.kind !== "travel") return;
+        const id = `symbol-${Date.now()}`;
+        state.project.symbols.push({
+          id,
+          iconId: state.selectedIconId,
+          coordinates: [
+            ((coordinates[0] + 180) % 360 + 360) % 360 - 180,
+            Math.min(90, Math.max(-90, coordinates[1])),
+          ],
+          scale: 1,
+          rotation: 0,
+          visible: true,
+        });
+        state.selectedObjectId = id;
       });
     },
   })),

@@ -135,13 +135,13 @@ export function TrailCanvas() {
           >
             <circle
               r="11"
-              fill="var(--trail)"
+              fill="var(--card)"
               stroke="var(--trail)"
               strokeWidth="3"
               vectorEffect="non-scaling-stroke"
             />
             {sizedPointSvg ? (
-              <g transform="translate(-10 -10)" fill="white" color="white" dangerouslySetInnerHTML={{ __html: sizedPointSvg }} />
+              <g transform="translate(-10 -10)" fill="var(--trail)" color="var(--trail)" dangerouslySetInnerHTML={{ __html: sizedPointSvg }} />
             ) : null}
             <text
               x="13"

@@ -1,7 +1,7 @@
 "use client";
 
-import { LocateFixed, Minus, Plus } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { LocateFixed, Minus, MousePointer2, Plus, Shapes } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ExpressionSpecification,
   GeoJSONSource,
@@ -143,7 +143,12 @@ function addTravelLayers(map: MapLibreMap, project: TravelProject) {
     layout: {
       "symbol-placement": "line",
       "symbol-spacing": 92,
-      "text-field": ">",
+      "text-field": [
+        "case",
+        ["boolean", ["get", "showDayLabel"], false],
+        ["concat", "> ", ["get", "dayLabel"]],
+        ">",
+      ],
       "text-font": ["Noto Sans Regular"],
       "text-size": 19 * project.presentation.textScale,
       "text-keep-upright": false,
@@ -281,6 +286,7 @@ function createStopElement(
   button.type = "button";
   button.className = `mapper-stop${selected ? " is-selected" : ""}`;
   button.dataset.labelPosition = String(labelPosition % 4);
+  button.dataset.labelAnchor = stop.labelAnchor;
   button.dataset.labelOffsetX = String(stop.labelOffset[0]);
   button.dataset.labelOffsetY = String(stop.labelOffset[1]);
   button.style.setProperty("--mapper-text-scale", String(textScale));
@@ -298,12 +304,25 @@ function createStopElement(
   const label = document.createElement("span");
   label.className = "mapper-stop__label";
   label.style.translate = `${stop.labelOffset[0]}px ${stop.labelOffset[1]}px`;
+  if (stop.labelStyle) {
+    label.style.setProperty("--label-font-size", `${stop.labelStyle.fontSize}`);
+    label.style.setProperty("--label-color", stop.labelStyle.color);
+    label.style.setProperty("--label-bold", stop.labelStyle.bold ? "800" : "400");
+  }
 
   const name = document.createElement("strong");
   name.textContent = stop.name;
+  if (stop.labelStyle) {
+    name.style.fontSize = `calc(0.72rem * var(--mapper-text-scale, 1) * ${stop.labelStyle.fontSize})`;
+    name.style.color = stop.labelStyle.color;
+    name.style.fontWeight = stop.labelStyle.bold ? "800" : "400";
+  }
 
   const day = document.createElement("small");
   day.textContent = stop.dayLabel;
+  if (stop.labelStyle) {
+    day.style.color = stop.labelStyle.color;
+  }
 
   label.append(name, day);
   button.append(dot, label);
@@ -320,7 +339,7 @@ function resolveLabelOverlaps(elements: HTMLButtonElement[], container: HTMLElem
     label.style.visibility = "visible";
     const baseX = Number(element.dataset.labelOffsetX ?? 0);
     const baseY = Number(element.dataset.labelOffsetY ?? 0);
-    if (baseX !== 0 || baseY !== 0) {
+    if (baseX !== 0 || baseY !== 0 || element.dataset.labelAnchor !== "auto") {
       label.style.translate = `${baseX}px ${baseY}px`;
       occupied.push(label.getBoundingClientRect());
       continue;
@@ -363,12 +382,31 @@ function createModeElement(
   selected: boolean,
   textScale: number,
   selectObject: (id: string) => void,
+  iconId?: string | null,
+  iconSvg?: string | null,
 ) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = `mapper-mode${selected ? " is-selected" : ""}`;
-  button.style.fontSize = `${0.48 * textScale}rem`;
-  button.textContent = mode;
+  if (iconId && iconSvg) {
+    button.style.fontSize = "0";
+    button.style.width = "32px";
+    button.style.height = "32px";
+    button.style.background = "var(--card)";
+    button.style.borderRadius = "50%";
+    button.style.border = "2px solid var(--border)";
+    button.style.display = "grid";
+    button.style.placeItems = "center";
+    const wrapper = document.createElement("span");
+    wrapper.style.width = "20px";
+    wrapper.style.height = "20px";
+    wrapper.style.color = "var(--foreground)";
+    wrapper.innerHTML = iconSvg;
+    button.append(wrapper);
+  } else {
+    button.style.fontSize = `${0.48 * textScale}rem`;
+    button.textContent = mode;
+  }
   button.setAttribute("aria-label", `Select ${mode} travel leg`);
   button.addEventListener("click", () => selectObject(legId));
   return button;
@@ -412,6 +450,19 @@ export function MapCanvas() {
   const selectObject = useEditorStore((state) => state.selectObject);
   const moveTravelStop = useEditorStore((state) => state.moveTravelStop);
   const moveTravelSymbol = useEditorStore((state) => state.moveTravelSymbol);
+  const moveTravelLegControl = useEditorStore((state) => state.moveTravelLegControl);
+  const placePOISymbol = useEditorStore((state) => state.placePOISymbol);
+  const selectedIconId = useEditorStore((state) => state.selectedIconId);
+
+  const [placingPOI, setPlacingPOI] = useState(false);
+  const placingPOIRef = useRef(false);
+
+  useEffect(() => {
+    placingPOIRef.current = placingPOI;
+    if (mapRef.current) {
+      mapRef.current.getCanvas().style.cursor = placingPOI ? "crosshair" : "";
+    }
+  }, [placingPOI]);
 
   const travelProject = project.kind === "travel" ? project : null;
 
@@ -488,6 +539,12 @@ export function MapCanvas() {
                 map.getCanvas().style.cursor = "";
               });
             }
+            map.on("click", (event) => {
+              if (placingPOIRef.current) {
+                if (event.defaultPrevented) return;
+                placePOISymbol([event.lngLat.lng, event.lngLat.lat]);
+              }
+            });
             setReady(true);
           } catch {
             setMapError("The itinerary layers could not be added to the map.");
@@ -618,20 +675,42 @@ export function MapCanvas() {
       const coordinates = getLegCoordinates(travelProject, leg);
       const midpoint = coordinates[Math.floor(coordinates.length / 2)];
       if (!midpoint) continue;
-      nextMarkers.push(
-        new maplibre.Marker({
-          element: createModeElement(
-            leg.mode,
-            leg.id,
-            selectedObjectId === leg.id,
-            travelProject.presentation.textScale,
-            selectObject,
-          ),
-          anchor: "center",
-        })
-          .setLngLat(midpoint)
-          .addTo(map),
-      );
+      const legIconSvg = leg.iconId ? getIconSvg(leg.iconId, travelProject.iconAssets) : null;
+      const marker = new maplibre.Marker({
+        element: createModeElement(
+          leg.mode,
+          leg.id,
+          selectedObjectId === leg.id,
+          travelProject.presentation.textScale,
+          selectObject,
+          leg.iconId,
+          legIconSvg,
+        ),
+        anchor: "center",
+        draggable: true,
+      })
+        .setLngLat(midpoint)
+        .addTo(map);
+      const startStop = travelProject.stops.find((item) => item.id === leg.from);
+      const endStop = travelProject.stops.find((item) => item.id === leg.to);
+      marker.on("dragend", () => {
+        if (!startStop || !endStop) return;
+        const position = marker.getLngLat();
+        const startPixel = map.project(startStop.coordinates);
+        const endPixel = map.project(endStop.coordinates);
+        const dragPixel = map.project([position.lng, position.lat]);
+        const dx = endPixel.x - startPixel.x;
+        const dy = endPixel.y - startPixel.y;
+        const length = Math.hypot(dx, dy) || 1;
+        const normalX = -dy / length;
+        const normalY = dx / length;
+        const midX = (startPixel.x + endPixel.x) / 2;
+        const midY = (startPixel.y + endPixel.y) / 2;
+        const bendUnit = Math.max(20, Math.min(240, length * 0.3));
+        const curvature = ((dragPixel.x - midX) * normalX + (dragPixel.y - midY) * normalY) / bendUnit;
+        moveTravelLegControl(leg.id, curvature);
+      });
+      nextMarkers.push(marker);
     }
 
     for (const symbol of travelProject.symbols.filter((item) => item.visible)) {
@@ -690,6 +769,7 @@ export function MapCanvas() {
   }, [
     moveTravelStop,
     moveTravelSymbol,
+    moveTravelLegControl,
     ready,
     selectedObjectId,
     selectObject,
@@ -745,7 +825,7 @@ export function MapCanvas() {
     >
       <div ref={containerRef} className="mapper-map" />
 
-      <div className="pointer-events-none absolute left-4 top-4 max-w-[calc(100%-7rem)] border-l-4 border-trail bg-popover/94 px-4 py-3 shadow-md backdrop-blur-sm">
+      <div className="pointer-events-none absolute left-4 top-4 z-10 max-w-[calc(100%-7rem)] border-l-4 border-trail bg-popover/94 px-4 py-3 shadow-md backdrop-blur-sm">
         <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
           {travelProject.durationDays} day journey
         </p>
@@ -802,6 +882,24 @@ export function MapCanvas() {
           <TooltipContent>Zoom in</TooltipContent>
         </Tooltip>
         <div className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={placingPOI ? "default" : "ghost"}
+              size="icon-sm"
+              onClick={() => {
+                setPlacingPOI((current) => !current);
+                if (mapRef.current) {
+                  mapRef.current.getCanvas().style.cursor = placingPOI ? "" : "crosshair";
+                }
+              }}
+              aria-label={placingPOI ? "Stop placing symbols" : "Place a POI symbol on the map"}
+            >
+              <MousePointer2 aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{placingPOI ? "Stop placing" : "Place symbol"}</TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
