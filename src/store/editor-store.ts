@@ -96,10 +96,10 @@ type EditorState = {
      key: "scale" | "rotation",
      value: number,
    ) => void;
-   updatePresentation: (
-     key: keyof PresentationSettings,
-     value: number,
-   ) => void;
+    updatePresentation: (
+      key: keyof PresentationSettings,
+      value: number | boolean,
+    ) => void;
    resetPresentation: () => void;
    resetSymbolicLayout: () => void;
    updateStopLabelOffset: (id: string, axis: 0 | 1, value: number) => void;
@@ -525,6 +525,7 @@ export const useEditorStore = create<EditorState>()(
           lineScale: 1,
           textScale: 1,
           symbolScale: 1,
+          showModeIcons: false,
         };
       });
     },
