@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { getIconSvg, getPointIconSvg, sizeIconSvg } from "@/lib/builtin-icons";
+import { foregroundFromBackground, mutedFromBackground } from "@/lib/color-utils";
 import { generateTrailScatter } from "@/lib/scatter";
 import { generateConceptContours, generateTrailRoute } from "@/lib/trail-geometry";
 import { useEditorStore } from "@/store/editor-store";
@@ -14,6 +15,7 @@ export function TrailCanvas() {
   const selectObject = useEditorStore((state) => state.selectObject);
   const moveTrailObject = useEditorStore((state) => state.moveTrailObject);
   const [zoom, setZoom] = useState(1);
+  const [titleVisible, setTitleVisible] = useState(true);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -27,6 +29,8 @@ export function TrailCanvas() {
     ? generateConceptContours(project)
     : [];
   const { lineScale, textScale, symbolScale } = project.presentation;
+  const canvasFg = foregroundFromBackground(project.canvas.background);
+  const canvasMuted = mutedFromBackground(project.canvas.background);
 
   function pointerPosition(event: React.PointerEvent<SVGSVGElement>) {
     const svg = svgRef.current;
@@ -43,6 +47,7 @@ export function TrailCanvas() {
       aria-label="Conceptual trail sketch"
       data-export-root
       className="canvas-grid relative min-h-0 flex-1 overflow-hidden outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/60"
+      style={{ "--canvas-bg": project.canvas.background, "--canvas-fg": canvasFg, "--canvas-muted": canvasMuted } as React.CSSProperties}
       tabIndex={0}
       onKeyDown={(event) => {
         if (event.key === "0") setZoom(1);
@@ -57,6 +62,9 @@ export function TrailCanvas() {
         aria-labelledby="trail-title trail-description"
         viewBox={`${viewX} ${viewY} ${viewWidth} ${viewHeight}`}
         className="absolute inset-0 size-full"
+        onPointerDown={(event) => {
+          if (event.target === event.currentTarget) selectObject("trail-terrain");
+        }}
         onPointerMove={(event) => {
           if (!draggingId) return;
           const point = pointerPosition(event);
@@ -112,7 +120,7 @@ export function TrailCanvas() {
 
         {project.waypoints.filter((point) => point.visible).map((point) => {
           const pointSvg = getPointIconSvg(point.iconId, project.iconAssets);
-          const sizedPointSvg = pointSvg ? sizeIconSvg(pointSvg, { width: 20, height: 20 }) : null;
+          const sizedPointSvg = pointSvg ? sizeIconSvg(pointSvg, { width: 20, height: 20, color: canvasFg }) : null;
           return (
           <g
             key={point.id}
@@ -135,22 +143,22 @@ export function TrailCanvas() {
           >
             <circle
               r="11"
-              fill="var(--trail)"
-              stroke="var(--trail)"
+              fill="var(--canvas-muted, var(--card))"
+              stroke="var(--canvas-fg, var(--trail))"
               strokeWidth="3"
               vectorEffect="non-scaling-stroke"
             />
             {sizedPointSvg ? (
-              <g transform="translate(-10 -10)" fill="white" color="white" dangerouslySetInnerHTML={{ __html: sizedPointSvg }} />
+              <g transform="translate(-10 -10)" fill="var(--canvas-fg, var(--trail))" color="var(--canvas-fg, var(--trail))" dangerouslySetInnerHTML={{ __html: sizedPointSvg }} />
             ) : null}
             <text
               x="13"
               y="4"
-              fill="var(--foreground)"
+              fill="var(--canvas-fg, var(--foreground))"
               fontSize={13 * textScale}
               fontWeight="700"
               paintOrder="stroke"
-              stroke="var(--canvas)"
+              stroke="var(--canvas-bg, var(--canvas))"
               strokeWidth="5"
               strokeLinejoin="round"
             >
@@ -163,12 +171,12 @@ export function TrailCanvas() {
         {project.icons.filter((icon) => icon.visible).map((icon) => {
           const svg = getIconSvg(icon.iconId, project.iconAssets);
           if (!svg) return null;
-          const sizedSvg = sizeIconSvg(svg, { width: 32, height: 32 });
+          const sizedSvg = sizeIconSvg(svg, { width: 32, height: 32, color: canvasFg });
           return (
             <g
               key={icon.id}
               transform={`translate(${icon.x} ${icon.y}) rotate(${icon.rotation}) scale(${icon.scale * symbolScale}) translate(-16 -16)`}
-              fill="var(--foreground)"
+              fill="var(--canvas-fg, var(--foreground))"
               aria-label={icon.iconId}
               onPointerDown={(event) => {
                 event.currentTarget.setPointerCapture(event.pointerId);
@@ -185,7 +193,7 @@ export function TrailCanvas() {
           generateTrailScatter(project, scatter).map((placement) => {
             const svg = getIconSvg(placement.iconId, project.iconAssets);
             if (!svg) return null;
-            const sizedSvg = sizeIconSvg(svg, { width: 32, height: 32 });
+            const sizedSvg = sizeIconSvg(svg, { width: 32, height: 32, color: canvasFg });
             return (
               <g
                 key={placement.id}
@@ -199,12 +207,31 @@ export function TrailCanvas() {
         )}
       </svg>
 
-      <div className="pointer-events-none absolute left-4 top-4 border-l-4 border-trail bg-popover/94 px-4 py-3 shadow-md backdrop-blur-sm">
-        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
-          Conceptual trail sketch
-        </p>
-        <h2 className="text-lg font-extrabold tracking-tight">{project.name}</h2>
-      </div>
+      {titleVisible ? (
+        <div className="pointer-events-none absolute left-4 top-4 border-l-4 border-trail bg-popover/94 px-4 py-3 shadow-md backdrop-blur-sm">
+          <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+            Conceptual trail sketch
+          </p>
+          <h2 className="text-lg font-extrabold tracking-tight">{project.name}</h2>
+          <button
+            type="button"
+            onClick={() => setTitleVisible(false)}
+            className="pointer-events-auto absolute -right-2 -top-2 flex size-5 items-center justify-center rounded-full bg-popover text-[10px] text-muted-foreground shadow-sm hover:text-foreground"
+            aria-label="Hide title"
+          >
+            ✕
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setTitleVisible(true)}
+          className="pointer-events-auto absolute left-4 top-4 z-10 flex size-7 items-center justify-center rounded-md border bg-popover/80 text-xs text-muted-foreground shadow-sm hover:text-foreground"
+          aria-label="Show title"
+        >
+          +
+        </button>
+      )}
 
       <div className="absolute right-4 top-4 flex items-center rounded-md border bg-popover/95 p-1 shadow-sm">
         <Button

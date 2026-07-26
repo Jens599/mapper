@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { getIconSvg, getPointIconSvg, sizeIconSvg } from "@/lib/builtin-icons";
+import { foregroundFromBackground, mutedFromBackground } from "@/lib/color-utils";
 import type { Coordinate, TravelProject, TravelScatter } from "@/lib/project-schema";
 import { generateTravelScatter, geographicToSymbolic } from "@/lib/scatter";
 import { getSymbolicStopPositions } from "@/lib/travel-geometry";
@@ -45,6 +46,31 @@ function buildSymbolicLegPath(
     const y = baseY + (tangentX / tangentLength) * offset;
     return `${index === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
   }).join(" ");
+}
+
+function buildSymbolicLoopPath(
+  center: { x: number; y: number },
+  style: TravelProject["legs"][number]["style"],
+) {
+  const direction = style.curvature < 0 ? -1 : 1;
+  const radius = Math.min(190, 48 + Math.abs(style.curvature) * 14);
+  const noise = new Noise(style.noiseSeed);
+  const path = Array.from({ length: 49 }, (_, index) => {
+    const progress = index / 48;
+    const angle = 0.18 + progress * (Math.PI * 2 - 0.46);
+    const envelope = Math.sin(Math.PI * progress);
+    const modulation = 1 + noise.perlin2(progress * style.noiseScale, 41) * style.noiseAmplitude * 0.04;
+    const x = center.x + Math.sin(angle) * radius * modulation;
+    const y = center.y - direction * (1 - Math.cos(angle)) * radius * modulation + envelope * style.winding * 4;
+    return `${index === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(" ");
+  return {
+    path,
+    modeX: center.x,
+    modeY: center.y - direction * radius * 2,
+    arrowX: center.x + Math.sin(Math.PI * 2 - 0.28) * radius,
+    arrowY: center.y - direction * (1 - Math.cos(Math.PI * 2 - 0.28)) * radius,
+  };
 }
 
 function symbolicScatterPosition(
@@ -132,11 +158,13 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
   const moveSymbolicStop = useEditorStore((state) => state.moveSymbolicStop);
   const moveSymbolicSymbol = useEditorStore((state) => state.moveSymbolicSymbol);
+  const updateLegStyle = useEditorStore((state) => state.updateLegStyle);
   const resetSymbolicLayout = useEditorStore((state) => state.resetSymbolicLayout);
   const svgRef = useRef<SVGSVGElement>(null);
+  const [titleVisible, setTitleVisible] = useState(true);
   const [dragging, setDragging] = useState<{
     id: string;
-    type: "stop" | "symbol";
+    type: "stop" | "symbol" | "curve";
   } | null>(null);
   const [viewport, setViewport] = useState({ centerX: 500, centerY: 350, zoom: 1 });
   const [panning, setPanning] = useState<{
@@ -147,6 +175,8 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const { lineScale, textScale, symbolScale } = project.presentation;
   const viewWidth = 1000 / viewport.zoom;
   const viewHeight = 700 / viewport.zoom;
+  const canvasFg = foregroundFromBackground(project.map.background);
+  const canvasMuted = mutedFromBackground(project.map.background);
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -185,11 +215,19 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
       const start = positions.get(leg.from);
       const end = positions.get(leg.to);
       if (!start || !end) continue;
+      if (leg.loopback && leg.from === leg.to) {
+        const radius = Math.min(190, 48 + Math.abs(leg.style.curvature) * 14);
+        points.push(
+          { x: start.x - radius - 55, y: start.y - radius * 2 - 55 },
+          { x: start.x + radius + 55, y: start.y + radius * 2 + 55 },
+        );
+        continue;
+      }
       const dx = end.x - start.x;
       const dy = end.y - start.y;
       const length = Math.hypot(dx, dy) || 1;
       const bend = leg.style.curvature * Math.min(120, length * 0.3);
-      const margin = 48 + leg.style.winding * 12 + leg.style.noiseAmplitude * 34;
+      const margin = 48 + Math.abs(leg.style.winding) * 12 + Math.abs(leg.style.noiseAmplitude) * 34;
       const control = {
         x: (start.x + end.x) / 2 + (-dy / length) * bend,
         y: (start.y + end.y) / 2 + (dx / length) * bend,
@@ -243,6 +281,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
       aria-label="No map travel itinerary"
       data-export-root
       className="canvas-grid relative min-h-0 flex-1 overflow-hidden outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/60"
+      style={{ "--canvas-bg": project.map.background, "--canvas-fg": canvasFg, "--canvas-muted": canvasMuted } as React.CSSProperties}
       tabIndex={0}
       onKeyDown={(event) => {
         if (event.key === "0") fitToScreen();
@@ -259,6 +298,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
         className="absolute inset-0 size-full"
         onPointerDown={(event) => {
           if (event.target !== event.currentTarget) return;
+          selectObject("terrain-context");
           event.currentTarget.setPointerCapture(event.pointerId);
           setPanning({
             clientX: event.clientX,
@@ -288,8 +328,28 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           if (!point) return;
           if (dragging.type === "stop") {
             moveSymbolicStop(dragging.id, { x: point.x, y: point.y });
-          } else {
+          } else if (dragging.type === "symbol") {
             moveSymbolicSymbol(dragging.id, { x: point.x, y: point.y });
+          } else {
+            const leg = project.legs.find((item) => item.id === dragging.id);
+            const start = leg ? positions.get(leg.from) : null;
+            const end = leg ? positions.get(leg.to) : null;
+            if (!leg || !start || !end) return;
+            if (leg.loopback && leg.from === leg.to) {
+              const deltaY = point.y - start.y;
+              const sign = deltaY > 0 ? -1 : 1;
+              updateLegStyle(leg.id, "curvature", Math.min(10, Math.max(-10, sign * Math.max(0.1, (Math.abs(deltaY) / 2 - 48) / 14))));
+            } else {
+              const dx = end.x - start.x;
+              const dy = end.y - start.y;
+              const length = Math.hypot(dx, dy) || 1;
+              const normalX = -dy / length;
+              const normalY = dx / length;
+              const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+              const bendUnit = Math.max(1, Math.min(120, length * 0.3));
+              const curvature = ((point.x - midpoint.x) * normalX + (point.y - midpoint.y) * normalY) / bendUnit;
+              updateLegStyle(leg.id, "curvature", Math.min(10, Math.max(-10, curvature)));
+            }
           }
         }}
         onPointerUp={() => {
@@ -316,27 +376,58 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           const start = positions.get(leg.from);
           const end = positions.get(leg.to);
           if (!start || !end) return null;
-          const dx = end.x - start.x;
-          const dy = end.y - start.y;
-          const length = Math.hypot(dx, dy) || 1;
-          const normalX = -dy / length;
-          const normalY = dx / length;
-          const bend = leg.style.curvature * Math.min(120, length * 0.3);
-          const cx = (start.x + end.x) / 2 + normalX * bend;
-          const cy = (start.y + end.y) / 2 + normalY * bend;
-          const startTangentLength = Math.hypot(cx - start.x, cy - start.y) || 1;
-          const endTangentLength = Math.hypot(end.x - cx, end.y - cy) || 1;
-          const routeStart = {
-            x: start.x + ((cx - start.x) / startTangentLength) * 12,
-            y: start.y + ((cy - start.y) / startTangentLength) * 12,
+          let path: string;
+          let modeX: number;
+          let modeY: number;
+          let arrowLabelX: number;
+          let arrowLabelY: number;
+          if (leg.loopback && leg.from === leg.to) {
+            const loop = buildSymbolicLoopPath(start, leg.style);
+            path = loop.path;
+            modeX = loop.modeX;
+            modeY = loop.modeY;
+            arrowLabelX = loop.arrowX;
+            arrowLabelY = loop.arrowY;
+          } else {
+            const dx = end.x - start.x;
+            const dy = end.y - start.y;
+            const length = Math.hypot(dx, dy) || 1;
+            const normalX = -dy / length;
+            const normalY = dx / length;
+            const bend = leg.style.curvature * Math.min(120, length * 0.3);
+            const cx = (start.x + end.x) / 2 + normalX * bend;
+            const cy = (start.y + end.y) / 2 + normalY * bend;
+            const startTangentLength = Math.hypot(cx - start.x, cy - start.y) || 1;
+            const endTangentLength = Math.hypot(end.x - cx, end.y - cy) || 1;
+            const routeStart = {
+              x: start.x + ((cx - start.x) / startTangentLength) * 12,
+              y: start.y + ((cy - start.y) / startTangentLength) * 12,
+            };
+            const routeEnd = {
+              x: end.x - ((end.x - cx) / endTangentLength) * 26,
+              y: end.y - ((end.y - cy) / endTangentLength) * 26,
+            };
+            path = buildSymbolicLegPath(routeStart, { x: cx, y: cy }, routeEnd, leg.style);
+            const bezierMid = {
+              x: 0.25 * routeStart.x + 0.5 * cx + 0.25 * routeEnd.x,
+              y: 0.25 * routeStart.y + 0.5 * cy + 0.25 * routeEnd.y,
+            };
+            modeX = bezierMid.x + normalX * (22 + (index % 2) * 12);
+            modeY = bezierMid.y + normalY * (22 + (index % 2) * 12);
+            arrowLabelX = routeEnd.x - normalX * 15;
+            arrowLabelY = routeEnd.y - normalY * 15;
+          }
+          const destinationDay = project.stops.find((stop) => stop.id === leg.to)?.dayLabel;
+          const modeIconMap: Record<string, string> = {
+            walk: "carbon-walk",
+            drive: "carbon-car",
+            flight: "carbon-airport",
+            train: "carbon-train",
+            boat: "carbon-boat",
           };
-          const routeEnd = {
-            x: end.x - ((end.x - cx) / endTangentLength) * 26,
-            y: end.y - ((end.y - cy) / endTangentLength) * 26,
-          };
-          const path = buildSymbolicLegPath(routeStart, { x: cx, y: cy }, routeEnd, leg.style);
-          const modeX = (start.x + end.x) / 2 + normalX * (22 + (index % 2) * 12);
-          const modeY = (start.y + end.y) / 2 + normalY * (22 + (index % 2) * 12);
+          const effectiveIconId = leg.iconId || (project.presentation.showModeIcons ? modeIconMap[leg.mode] : null);
+          const legIconSvg = effectiveIconId ? getIconSvg(effectiveIconId, project.iconAssets) : null;
+          const sizedLegIcon = legIconSvg ? sizeIconSvg(legIconSvg, { width: 20, height: 20, color: canvasFg }) : null;
           return (
             <g key={leg.id} onClick={() => selectObject(leg.id)} className="cursor-pointer">
               <path d={path} fill="none" stroke="var(--card)" strokeWidth={10 * lineScale} strokeLinecap="round" />
@@ -349,12 +440,36 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
                 strokeLinecap="round"
                 markerEnd="url(#symbolic-arrow)"
               />
-              <g transform={`translate(${modeX} ${modeY})`}>
-                <rect x="-28" y="-10" width="56" height="20" rx="10" fill="var(--card)" stroke={leg.style.color} />
-                <text textAnchor="middle" y="3" fill="var(--foreground)" fontSize={8 * textScale} fontFamily="monospace" fontWeight="700">
-                  {leg.mode.toUpperCase()}
-                </text>
+              <g
+                transform={`translate(${modeX} ${modeY})`}
+                className="cursor-move"
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  setDragging({ id: leg.id, type: "curve" });
+                  selectObject(leg.id);
+                }}
+              >
+                {sizedLegIcon ? (
+                  <>
+                    <rect x="-20" y="-20" width="40" height="40" rx="8" fill="transparent" stroke="transparent" />
+                    <g transform={`translate(-12 -12)`} fill="var(--canvas-fg, var(--foreground))" color="var(--canvas-fg, var(--foreground))" pointerEvents="none" dangerouslySetInnerHTML={{ __html: sizedLegIcon }} />
+                  </>
+                ) : (
+                  <>
+                    <rect x="-34" y="-10" width="68" height="20" rx="10" fill="var(--canvas-muted, var(--muted))" stroke={leg.style.color} />
+                    <text textAnchor="middle" y="3" fill="var(--canvas-fg, var(--foreground))" fontSize={8 * textScale} fontFamily="monospace" fontWeight="700">
+                      {leg.mode.toUpperCase()}
+                    </text>
+                  </>
+                )}
               </g>
+              {leg.showDayLabel && destinationDay ? (
+                <g transform={`translate(${arrowLabelX} ${arrowLabelY})`} pointerEvents="none">
+                  <rect x="-25" y="-9" width="50" height="16" rx="8" fill="var(--muted)" stroke={leg.style.color} />
+                  <text textAnchor="middle" y="2.5" fill={leg.style.color} fontSize={7 * textScale} fontFamily="monospace" fontWeight="700">{destinationDay}</text>
+                </g>
+              ) : null}
             </g>
           );
         })}
@@ -362,7 +477,14 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
         {project.stops.filter((stop) => stop.visible).map((stop, index) => {
           const position = positions.get(stop.id);
           if (!position) return null;
-          const placeAbove = index % 2 === 0;
+          const anchor = stop.labelAnchor === "auto" ? (index % 2 === 0 ? "top" : "bottom") : stop.labelAnchor;
+          const labelLayout = anchor === "top"
+            ? { x: 0, y: -24, rectX: -72, rectY: -34, textX: 0, nameY: -19, dayY: -7 }
+            : anchor === "bottom"
+              ? { x: 0, y: 25, rectX: -72, rectY: 0, textX: 0, nameY: 14, dayY: 27 }
+              : anchor === "right"
+                ? { x: 24, y: -17, rectX: 0, rectY: 0, textX: 72, nameY: 14, dayY: 27 }
+                : { x: -24, y: -17, rectX: -144, rectY: 0, textX: -72, nameY: 14, dayY: 27 };
           const iconSvg = getPointIconSvg(stop.icon, project.iconAssets);
           const sizedIcon = iconSvg ? sizeIconSvg(iconSvg, { width: 20, height: 20 }) : null;
           return (
@@ -383,16 +505,20 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
               }}
               className="cursor-pointer outline-none"
             >
-              <circle r="12" fill="var(--trail)" stroke="var(--card)" strokeWidth="4" />
-              {sizedIcon ? (
-                <g transform="translate(-10 -10)" fill="white" color="white" dangerouslySetInnerHTML={{ __html: sizedIcon }} />
+              {stop.pointStyle?.showFill !== false ? (
+              <circle r="13" fill={stop.pointStyle?.fill ?? "var(--canvas-muted, var(--muted))"} stroke={stop.pointStyle?.showStroke === false ? "none" : stop.pointStyle?.stroke ?? "var(--canvas-fg, var(--trail))"} strokeWidth={stop.pointStyle?.strokeWidth ?? 2.5} />
+              ) : stop.pointStyle?.showStroke !== false ? (
+              <circle r="13" fill="none" stroke={stop.pointStyle?.stroke ?? "var(--canvas-fg, var(--trail))"} strokeWidth={stop.pointStyle?.strokeWidth ?? 2.5} />
               ) : null}
-              <g transform={`translate(0 ${placeAbove ? -24 : 25})`}>
-                <rect x="-72" y={placeAbove ? -34 : 0} width="144" height="34" rx="4" fill="var(--card)" stroke="#c9d0ca" />
-                <text textAnchor="middle" y={placeAbove ? -19 : 14} fill="var(--foreground)" fontSize={12 * textScale} fontWeight="700">
+              {sizedIcon ? (
+                <g transform="translate(-10 -10)" fill="var(--canvas-fg, var(--trail))" color="var(--canvas-fg, var(--trail))" dangerouslySetInnerHTML={{ __html: sizedIcon }} />
+              ) : null}
+              <g transform={`translate(${labelLayout.x + stop.labelOffset[0]} ${labelLayout.y + stop.labelOffset[1]})`}>
+                <rect x={labelLayout.rectX} y={labelLayout.rectY} width="144" height="34" rx="4" fill="var(--canvas-muted, var(--muted))" stroke="var(--canvas-fg, var(--muted-foreground))" />
+                <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.nameY} fill="var(--canvas-fg, var(--foreground))" fontSize={12 * textScale} fontWeight="700">
                   {stop.name}
                 </text>
-                <text textAnchor="middle" y={placeAbove ? -7 : 27} fill="var(--trail)" fontSize={9 * textScale} fontFamily="monospace" fontWeight="700">
+                <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.dayY} fill="var(--canvas-fg, var(--trail))" fontSize={9 * textScale} fontFamily="monospace" fontWeight="700">
                   {stop.dayLabel}
                 </text>
               </g>
@@ -404,7 +530,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           const svg = getIconSvg(symbol.iconId, project.iconAssets);
           if (!svg) return null;
           const base = symbol.diagramPosition ?? geographicToSymbolic(project, symbol.coordinates);
-          const sizedSvg = sizeIconSvg(svg, { width: 32, height: 32 });
+            const sizedSvg = sizeIconSvg(svg, { width: 32, height: 32, color: canvasFg });
           return (
             <g
               key={symbol.id}
@@ -430,7 +556,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
               placement.coordinates,
               positions,
             );
-            const sizedSvg = sizeIconSvg(svg, { width: 32, height: 32 });
+          const sizedSvg = sizeIconSvg(svg, { width: 32, height: 32, color: canvasFg });
             return (
               <g
                 key={placement.id}
@@ -444,12 +570,31 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
         )}
       </svg>
 
-      <div className="pointer-events-none absolute left-4 top-4 border-l-4 border-trail bg-popover/94 px-4 py-3 shadow-md">
-        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
-          No map itinerary · not to scale
-        </p>
-        <h2 className="text-lg font-extrabold tracking-tight">{project.name}</h2>
-      </div>
+      {titleVisible ? (
+        <div className="pointer-events-none absolute left-4 top-4 border-l-4 border-trail bg-popover/94 px-4 py-3 shadow-md">
+          <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+            No map itinerary · not to scale
+          </p>
+          <h2 className="text-lg font-extrabold tracking-tight">{project.name}</h2>
+          <button
+            type="button"
+            onClick={() => setTitleVisible(false)}
+            className="pointer-events-auto absolute -right-2 -top-2 flex size-5 items-center justify-center rounded-full bg-popover text-[10px] text-muted-foreground shadow-sm hover:text-foreground"
+            aria-label="Hide title"
+          >
+            ✕
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setTitleVisible(true)}
+          className="pointer-events-auto absolute left-4 top-4 z-10 flex size-7 items-center justify-center rounded-md border bg-popover/80 text-xs text-muted-foreground shadow-sm hover:text-foreground"
+          aria-label="Show title"
+        >
+          +
+        </button>
+      )}
 
       <div className="absolute right-4 top-4 flex items-center rounded-md border bg-popover/95 p-1 shadow-sm">
         <Button variant="ghost" size="icon-sm" onClick={() => changeZoom(viewport.zoom - 0.15)} aria-label="Zoom out"><Minus aria-hidden="true" /></Button>

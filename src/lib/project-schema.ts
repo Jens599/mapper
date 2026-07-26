@@ -11,47 +11,64 @@ export const coordinateSchema = z.tuple([
 ]);
 
 export const stopSchema = z.object({
-  id: idSchema,
-  name: z.string().trim().min(1).max(80),
-  coordinates: coordinateSchema,
-  dayLabel: z.string().trim().min(1).max(24),
-  icon: idSchema,
-  elevation: z.number().finite().optional(),
-  labelOffset: z.tuple([z.number().min(-300).max(300), z.number().min(-300).max(300)]).default([0, 0]),
-  diagramPosition: z
-    .object({ x: z.number().finite(), y: z.number().finite() })
-    .optional(),
-  visible: z.boolean().default(true),
-});
+   id: idSchema,
+   name: z.string().trim().min(1).max(80),
+   coordinates: coordinateSchema,
+   dayLabel: z.string().trim().min(1).max(24),
+   icon: idSchema,
+   elevation: z.number().finite().optional(),
+   labelOffset: z.tuple([z.number().min(-300).max(300), z.number().min(-300).max(300)]).default([0, 0]),
+   labelAnchor: z.enum(["auto", "top", "right", "bottom", "left"]).default("auto"),
+    labelStyle: z.object({
+      fontSize: z.number().min(0.5).max(3).default(1),
+      color: z.string().regex(/^#[0-9a-f]{6}$/i).default("#18221d"),
+      bold: z.boolean().default(true),
+    }).default({ fontSize: 1, color: "#18221d", bold: true }),
+    pointStyle: z.object({
+      fill: z.string().regex(/^#[0-9a-f]{6}$/i).default("#e9efeb"),
+      showFill: z.boolean().default(true),
+      stroke: z.string().regex(/^#[0-9a-f]{6}$/i).default("#18221d"),
+      showStroke: z.boolean().default(true),
+      strokeWidth: z.number().min(0).max(10).default(2.5),
+    }).default({ fill: "#e9efeb", showFill: true, stroke: "#18221d", showStroke: true, strokeWidth: 2.5 }),
+    diagramPosition: z
+     .object({ x: z.number().finite(), y: z.number().finite() })
+     .optional(),
+   visible: z.boolean().default(true),
+ });
 
 const presentationSchema = z.object({
   lineScale: z.number().min(0.25).max(4),
   textScale: z.number().min(0.5).max(3),
   symbolScale: z.number().min(0.25).max(4),
+  showModeIcons: z.boolean().default(false),
 });
 
 export const legStyleSchema = z.object({
   line: z.enum(["solid", "dashed", "dotted"]),
-  curvature: z.number().min(-1).max(1),
-  winding: z.number().min(0).max(1),
+  curvature: z.number().min(-10).max(10),
+  winding: z.number().min(-10).max(10),
   noiseSeed: z.number().int().min(0).max(2_147_483_647).default(42),
-  noiseAmplitude: z.number().min(0).max(1).default(0),
+  noiseAmplitude: z.number().min(-10).max(10).default(0),
   noiseScale: z.number().min(0.25).max(8).default(2),
   noiseOctaves: z.number().int().min(1).max(6).default(3),
-  noiseModulation: z.number().min(0).max(1).default(0),
+  noiseModulation: z.number().min(-10).max(10).default(0),
   color: z.string().regex(/^#[0-9a-f]{6}$/i),
 });
 
 export const travelLegSchema = z.object({
-  id: idSchema,
-  name: z.string().trim().min(1).max(100),
-  from: idSchema,
-  to: idSchema,
-  mode: z.enum(["walk", "drive", "flight", "train", "boat"]),
-  via: z.array(coordinateSchema).max(100).default([]),
-  style: legStyleSchema,
-  visible: z.boolean().default(true),
-});
+   id: idSchema,
+   name: z.string().trim().min(1).max(100),
+   from: idSchema,
+   to: idSchema,
+   mode: z.enum(["walk", "drive", "flight", "train", "boat"]),
+   loopback: z.boolean().default(false),
+   showDayLabel: z.boolean().default(false),
+   iconId: idSchema.optional(),
+   via: z.array(coordinateSchema).max(100).default([]),
+   style: legStyleSchema,
+   visible: z.boolean().default(true),
+ });
 
 export const iconAssetSchema = z.object({
   id: idSchema,
@@ -203,14 +220,16 @@ const travelProjectSchema = z.object({
       lineScale: 1,
       textScale: 1,
       symbolScale: 1,
+      showModeIcons: false,
     }),
     map: z.object({
-      display: z.enum(["geographic", "symbolic"]).default("geographic"),
+      display: z.enum(["geographic", "symbolic"]).default("symbolic"),
       style: z.enum(["positron", "liberty", "bright"]),
       showContours: z.boolean(),
       showHillshade: z.boolean(),
       contourInterval: z.number().int().min(10).max(1_000),
       elevationUnits: z.enum(["m", "ft"]),
+      background: z.string().regex(/^#[0-9a-f]{6}$/i).default("#e9efeb"),
     }),
     stops: z.array(stopSchema).min(2),
     legs: z.array(travelLegSchema),
@@ -229,6 +248,7 @@ const trailProjectSchema = z.object({
     lineScale: 1,
     textScale: 1,
     symbolScale: 1,
+    showModeIcons: false,
   }),
   canvas: z.object({
     width: z.number().positive().max(100_000),
@@ -337,10 +357,10 @@ export const projectSchema = z
         }
       }
 
-      if (leg.from === leg.to) {
+      if (leg.from === leg.to && !leg.loopback) {
         context.addIssue({
           code: "custom",
-          message: `Travel leg '${leg.id}' must connect two different stops`,
+          message: `Travel leg '${leg.id}' must enable loopback to reuse one stop`,
           path: ["legs"],
         });
       }

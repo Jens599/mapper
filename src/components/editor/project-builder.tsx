@@ -8,7 +8,7 @@ import { EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { Columns2, FileCode2, Maximize2, X } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useDeferredValue, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { usePanelRef } from "react-resizable-panels";
 
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogOverlay,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/resizable";
 import { deserializeProject, serializeProject } from "@/lib/project-io";
 import { useEditorStore } from "@/store/editor-store";
+import { getIconIds } from "@/lib/icons";
 
 const CodeMirror = dynamic(() => import("@uiw/react-codemirror"), {
   ssr: false,
@@ -39,17 +41,32 @@ const CodeMirror = dynamic(() => import("@uiw/react-codemirror"), {
 
 const mapperCompletions = [
   "version", "kind", "id", "name", "durationDays", "subtitle", "presentation",
-  "lineScale", "textScale", "symbolScale", "map", "display", "style",
-  "showContours", "showHillshade", "contourInterval", "elevationUnits", "stops",
-  "coordinates", "dayLabel", "icon", "elevation", "labelOffset", "legs", "from",
-  "to", "mode", "via", "line", "solid", "dashed", "dotted", "curvature", "winding",
-  "noiseSeed", "noiseAmplitude", "noiseScale", "noiseOctaves", "noiseModulation", "color", "iconAssets",
+  "lineScale", "textScale", "symbolScale", "showModeIcons", "map", "display", "style",
+  "showContours", "showHillshade", "contourInterval", "elevationUnits", "background",
+  "stops", "coordinates", "dayLabel", "icon", "elevation", "labelOffset", "labelAnchor",
+  "labelStyle", "fontSize", "bold", "color", "legs", "from",
+  "to", "mode", "loopback", "showDayLabel", "iconId", "via", "corridor", "corridorNoise", "page",
+  "line", "solid", "dashed", "dotted", "curvature", "winding",
+  "noiseSeed", "noiseAmplitude", "noiseScale", "noiseOctaves", "noiseModulation",
+  "noise", "enabled", "iconAssets",
   "symbols", "scatter", "seed", "count", "minSpacingKm", "minSpacing", "region",
   "type", "trip-bounds", "map-edge", "north", "south", "east", "west",
-  "around-stop", "along-leg", "bounds", "appearance", "scale", "rotation",
+  "around-stop", "stopId", "along-leg", "legId", "bounds",
+  "padding", "radius", "appearance", "scale", "rotation",
   "canvas", "canvas-edge", "top", "bottom", "left", "right", "around-waypoint",
-  "along-route", "rectangle", "waypoints", "routes", "terrain", "icons", "visible",
+  "waypointId", "along-route", "routeId", "rectangle",
+  "waypoints", "routes", "terrain", "icons", "visible",
 ].map((label) => ({ label, type: "property" }));
+
+const iconCompletions = getIconIds().map((id) => ({ label: id, type: "constant" }));
+
+function iconValueCompletionSource(context: CompletionContext) {
+  const word = context.matchBefore(/[\w-]*/);
+  if (!word || (word.from === word.to && !context.explicit)) return null;
+  const lineBefore = context.state.sliceDoc(Math.max(0, word.from - 25), word.from);
+  if (!/(?:^|\n)\s*(?:icon|iconId|icons):\s*$/.test(lineBefore)) return null;
+  return { from: word.from, options: iconCompletions };
+}
 
 function mapperCompletionSource(context: CompletionContext) {
   const word = context.matchBefore(/[\w-]*/);
@@ -92,16 +109,21 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
   const [desktop, setDesktop] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const editorPanelRef = usePanelRef();
-  const deferredSource = useDeferredValue(source);
-  let valid = true;
-  try {
-    deserializeProject(deferredSource);
-  } catch {
-    valid = false;
-  }
+  const userEdited = useRef(false);
 
   useEffect(() => {
-    if (open) setSource(serializeProject(project));
+    if (open) {
+      setSource(serializeProject(project));
+      userEdited.current = false;
+    } else {
+      userEdited.current = false;
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (open && !userEdited.current) {
+      setSource(serializeProject(project));
+    }
   }, [open, project]);
 
   useEffect(() => {
@@ -134,6 +156,11 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
       setError(reason instanceof Error ? reason.message : "The YAML project is invalid.");
     }
   }
+
+  const onChange = useCallback((value: string) => {
+    setSource(value);
+    userEdited.current = true;
+  }, []);
 
   const workspace = (
     <div className="flex size-full min-h-0 flex-col bg-[#1e1e1e] text-[#d4d4d4]">
@@ -175,28 +202,25 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
             extensions={[
               yaml(),
               syntaxHighlighting(accessibleYamlHighlight),
-              autocompletion({ override: [mapperCompletionSource] }),
+              autocompletion({ override: [iconValueCompletionSource, mapperCompletionSource] }),
               linter((view) => {
                 try {
                   deserializeProject(view.state.doc.toString());
                   return [];
-                } catch (reason) {
+                } catch {
                   return [
                     {
                       from: 0,
-                      to: Math.min(1, view.state.doc.length),
+                      to: view.state.doc.length,
                       severity: "error",
-                      message:
-                        reason instanceof Error
-                          ? reason.message
-                          : "Project YAML is invalid",
+                      message: "Project YAML is invalid",
                     },
                   ];
                 }
               }, { delay: 400 }),
               EditorView.lineWrapping,
             ]}
-            onChange={setSource}
+            onChange={onChange}
             basicSetup={{
               lineNumbers: true,
               foldGutter: true,
@@ -210,7 +234,7 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
           </p>
         ) : null}
         <div className="flex h-6 shrink-0 items-center justify-between bg-[#007acc] px-3 font-mono text-[10px] text-white">
-          <span>{valid ? "Valid Mapper project" : "Schema errors"}</span>
+          <span>Mapper YAML</span>
           <span>YAML | UTF-8 | Spaces: 2</span>
         </div>
         <div className="flex shrink-0 justify-end gap-2 border-t border-[#2b2b2b] bg-[#181818] p-3">
@@ -231,23 +255,24 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
         setOpen(true);
       }}>{children}</span>
       <Dialog open={open && desktop} onOpenChange={setOpen}>
+        <DialogOverlay className="bg-black/30 backdrop-blur-[2px]" />
         <DialogContent
           showCloseButton={false}
           className={fullscreen
             ? "inset-0 size-full max-w-none translate-x-0 translate-y-0 rounded-none bg-transparent p-0 ring-0"
-            : "inset-x-0 bottom-0 left-0 top-12 h-auto w-full max-w-none translate-x-0 translate-y-0 rounded-none bg-transparent p-0 ring-0"}
+            : "inset-0 bottom-0 left-0 top-0 h-full w-full max-w-none translate-x-0 translate-y-0 rounded-none bg-transparent p-0 ring-0"}
         >
           <DialogTitle className="sr-only">Project builder</DialogTitle>
           <DialogDescription className="sr-only">Edit and validate the active project YAML.</DialogDescription>
           <ResizablePanelGroup orientation="horizontal" className="size-full">
-            <ResizablePanel defaultSize="50%" minSize="0%" className="pointer-events-none" />
-            <ResizableHandle withHandle className="pointer-events-auto bg-[#454545]" onDoubleClick={showHalfScreen} />
+            <ResizablePanel defaultSize="50%" minSize="0%" className="bg-black/40" />
+            <ResizableHandle withHandle className="bg-[#454545]" onDoubleClick={showHalfScreen} />
             <ResizablePanel
               panelRef={editorPanelRef}
               defaultSize="50%"
               minSize="30%"
-              maxSize={fullscreen ? "100%" : "80%"}
-              className="pointer-events-auto shadow-[-10px_0_30px_rgba(0,0,0,0.22)]"
+              maxSize="80%"
+              className="shadow-[-10px_0_30px_rgba(0,0,0,0.35)]"
             >
               {workspace}
             </ResizablePanel>

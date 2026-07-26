@@ -8,6 +8,7 @@ import {
   MapPin,
   Mountain,
   PanelLeftClose,
+  Pencil,
   Plane,
   Plus,
   Ship,
@@ -175,6 +176,104 @@ function ObjectRow({
   );
 }
 
+function EditStopDialog({ stop }: { stop: TravelStop }) {
+  const updateTravelStop = useEditorStore((state) => state.updateTravelStop);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(stop.name);
+  const [dayLabel, setDayLabel] = useState(stop.dayLabel);
+  const [longitude, setLongitude] = useState(stop.coordinates[0]);
+  const [latitude, setLatitude] = useState(stop.coordinates[1]);
+  const [elevation, setElevation] = useState(stop.elevation === undefined ? "" : String(stop.elevation));
+
+  function openEditor() {
+    setName(stop.name);
+    setDayLabel(stop.dayLabel);
+    setLongitude(stop.coordinates[0]);
+    setLatitude(stop.coordinates[1]);
+    setElevation(stop.elevation === undefined ? "" : String(stop.elevation));
+    setOpen(true);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button variant="outline" size="sm" onClick={openEditor}><Pencil aria-hidden="true" /> Edit stop</Button>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit stop</DialogTitle>
+          <DialogDescription>Update the point label and geographic details.</DialogDescription>
+        </DialogHeader>
+        <form className="grid gap-4" onSubmit={(event) => {
+          event.preventDefault();
+          updateTravelStop(stop.id, {
+            name,
+            dayLabel,
+            coordinates: [longitude, latitude],
+            elevation: elevation.trim() === "" ? undefined : Number(elevation),
+          });
+          setOpen(false);
+        }}>
+          <div className="grid gap-1.5"><Label htmlFor="edit-stop-name">Name</Label><Input id="edit-stop-name" value={name} maxLength={80} onChange={(event) => setName(event.currentTarget.value)} required /></div>
+          <div className="grid gap-1.5"><Label htmlFor="edit-stop-day">Day label</Label><Input id="edit-stop-day" value={dayLabel} maxLength={24} onChange={(event) => setDayLabel(event.currentTarget.value)} required /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1.5"><Label htmlFor="edit-stop-longitude">Longitude</Label><Input id="edit-stop-longitude" type="number" min={-180} max={180} step="any" value={longitude} onChange={(event) => setLongitude(event.currentTarget.valueAsNumber)} required /></div>
+            <div className="grid gap-1.5"><Label htmlFor="edit-stop-latitude">Latitude</Label><Input id="edit-stop-latitude" type="number" min={-90} max={90} step="any" value={latitude} onChange={(event) => setLatitude(event.currentTarget.valueAsNumber)} required /></div>
+          </div>
+          <div className="grid gap-1.5"><Label htmlFor="edit-stop-elevation">Elevation (optional)</Label><Input id="edit-stop-elevation" type="number" step="any" value={elevation} onChange={(event) => setElevation(event.currentTarget.value)} /></div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="submit" disabled={!name.trim() || !dayLabel.trim() || !Number.isFinite(longitude) || !Number.isFinite(latitude) || (elevation.trim() !== "" && !Number.isFinite(Number(elevation)))}>Save stop</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditLegDialog({ leg, stops }: { leg: TravelLeg; stops: TravelStop[] }) {
+  const updateTravelLeg = useEditorStore((state) => state.updateTravelLeg);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(leg.name);
+  const [from, setFrom] = useState(leg.from);
+  const [to, setTo] = useState(leg.to);
+  const [mode, setMode] = useState<TravelLeg["mode"]>(leg.mode);
+  const [loopback, setLoopback] = useState(leg.loopback);
+
+  function openEditor() {
+    setName(leg.name);
+    setFrom(leg.from);
+    setTo(leg.to);
+    setMode(leg.mode);
+    setLoopback(leg.loopback);
+    setOpen(true);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button variant="outline" size="sm" onClick={openEditor}><Pencil aria-hidden="true" /> Edit leg</Button>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit travel leg</DialogTitle><DialogDescription>Change endpoints, travel mode, or loopback behavior.</DialogDescription></DialogHeader>
+        <form className="grid gap-4" onSubmit={(event) => {
+          event.preventDefault();
+          updateTravelLeg(leg.id, { name, from, to, mode, loopback });
+          setOpen(false);
+        }}>
+          <div className="grid gap-1.5"><Label htmlFor="edit-leg-name">Name</Label><Input id="edit-leg-name" value={name} maxLength={100} onChange={(event) => setName(event.currentTarget.value)} required /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1.5"><Label htmlFor="edit-leg-from">From</Label><Select value={from} onValueChange={(value) => value && setFrom(value)}><SelectTrigger id="edit-leg-from" className="w-full"><SelectValue /></SelectTrigger><SelectContent>{stops.map((stop) => <SelectItem key={stop.id} value={stop.id}>{stop.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="grid gap-1.5"><Label htmlFor="edit-leg-to">To</Label><Select value={to} onValueChange={(value) => value && setTo(value)}><SelectTrigger id="edit-leg-to" className="w-full"><SelectValue /></SelectTrigger><SelectContent>{stops.map((stop) => <SelectItem key={stop.id} value={stop.id}>{stop.name}</SelectItem>)}</SelectContent></Select></div>
+          </div>
+          <div className="grid gap-1.5"><Label htmlFor="edit-leg-mode">Travel mode</Label><Select value={mode} onValueChange={(value) => value && setMode(value as TravelLeg["mode"])}><SelectTrigger id="edit-leg-mode" className="w-full"><SelectValue /></SelectTrigger><SelectContent>{Object.keys(modeIcons).map((travelMode) => <SelectItem key={travelMode} value={travelMode}>{travelMode}</SelectItem>)}</SelectContent></Select></div>
+          <label className="flex min-h-9 items-center justify-between gap-3 text-sm">Loopback<Switch checked={loopback} onCheckedChange={(checked) => { setLoopback(checked); if (checked && from) setTo(from); }} /></label>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="submit" disabled={!name.trim() || !from || !to || (from === to && !loopback)}>Save leg</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function StopProperties({
   stop,
   idPrefix,
@@ -185,7 +284,11 @@ function StopProperties({
   const updateStopLabelOffset = useEditorStore(
     (state) => state.updateStopLabelOffset,
   );
+  const updateStopLabelStyle = useEditorStore(
+    (state) => state.updateStopLabelStyle,
+  );
   const updatePointIcon = useEditorStore((state) => state.updatePointIcon);
+  const updateTravelStop = useEditorStore((state) => state.updateTravelStop);
   const project = useEditorStore((state) => state.project);
   const iconOptions = project.kind === "travel"
     ? [...builtinIcons, ...project.iconAssets.map((icon) => ({ ...icon, pack: "Imported" as const }))]
@@ -203,6 +306,7 @@ function StopProperties({
           {stop.name}
         </h2>
       </div>
+      <EditStopDialog stop={stop} />
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
         <div>
           <dt className="text-muted-foreground">Schedule</dt>
@@ -237,6 +341,60 @@ function StopProperties({
         </Select>
       </div>
       <p className="border-l-2 border-water pl-3 text-xs leading-5 text-muted-foreground">
+        Point style
+      </p>
+      <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
+        Background fill
+        <Switch checked={stop.pointStyle.showFill} onCheckedChange={(checked) => updateTravelStop(stop.id, { pointStyle: { ...stop.pointStyle, showFill: checked } })} />
+      </label>
+      {stop.pointStyle.showFill ? (
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}point-fill`}>Fill color</Label>
+        <div className="flex items-center gap-2">
+          <input
+            id={`${idPrefix}point-fill`}
+            type="color"
+            value={stop.pointStyle.fill}
+            onChange={(event) => updateTravelStop(stop.id, { pointStyle: { ...stop.pointStyle, fill: event.currentTarget.value } })}
+            className="size-8 cursor-pointer rounded border bg-transparent p-0.5"
+          />
+          <span className="font-mono text-xs text-muted-foreground">{stop.pointStyle.fill}</span>
+        </div>
+      </div>
+      ) : null}
+      <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
+        Border stroke
+        <Switch checked={stop.pointStyle.showStroke} onCheckedChange={(checked) => updateTravelStop(stop.id, { pointStyle: { ...stop.pointStyle, showStroke: checked } })} />
+      </label>
+      {stop.pointStyle.showStroke ? (
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}point-stroke`}>Stroke color</Label>
+        <div className="flex items-center gap-2">
+          <input
+            id={`${idPrefix}point-stroke`}
+            type="color"
+            value={stop.pointStyle.stroke}
+            onChange={(event) => updateTravelStop(stop.id, { pointStyle: { ...stop.pointStyle, stroke: event.currentTarget.value } })}
+            className="size-8 cursor-pointer rounded border bg-transparent p-0.5"
+          />
+          <span className="font-mono text-xs text-muted-foreground">{stop.pointStyle.stroke}</span>
+        </div>
+      </div>
+      ) : null}
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}label-anchor`}>Tag alignment</Label>
+        <Select value={stop.labelAnchor} onValueChange={(value) => value && updateTravelStop(stop.id, { labelAnchor: value as TravelStop["labelAnchor"] })}>
+          <SelectTrigger id={`${idPrefix}label-anchor`} className="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">Automatic</SelectItem>
+            <SelectItem value="top">Above</SelectItem>
+            <SelectItem value="right">Right</SelectItem>
+            <SelectItem value="bottom">Below</SelectItem>
+            <SelectItem value="left">Left</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <p className="border-l-2 border-water pl-3 text-xs leading-5 text-muted-foreground">
         Drag the stop directly on the map. Adjust its label separately when nearby
         labels collide.
       </p>
@@ -260,6 +418,35 @@ function StopProperties({
         unit="px"
         onChange={(value) => updateStopLabelOffset(stop.id, 1, value)}
       />
+      <p className="border-t border-sidebar-border pt-4 font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+        Label style
+      </p>
+      <NoiseControl
+        id={`${idPrefix}label-font-size`}
+        label="Font size"
+        value={stop.labelStyle.fontSize}
+        min={0.5}
+        max={3}
+        step={0.1}
+        onChange={(value) => updateStopLabelStyle(stop.id, "fontSize", value)}
+      />
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}label-color`}>Text color</Label>
+        <div className="flex items-center gap-2">
+          <input
+            id={`${idPrefix}label-color`}
+            type="color"
+            value={stop.labelStyle.color}
+            onChange={(event) => updateStopLabelStyle(stop.id, "color", event.currentTarget.value)}
+            className="size-8 cursor-pointer rounded border bg-transparent p-0.5"
+          />
+          <span className="font-mono text-xs text-muted-foreground">{stop.labelStyle.color}</span>
+        </div>
+      </div>
+      <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
+        Bold text
+        <Switch checked={stop.labelStyle.bold} onCheckedChange={(checked) => updateStopLabelStyle(stop.id, "bold", checked)} />
+      </label>
     </section>
   );
 }
@@ -267,14 +454,23 @@ function StopProperties({
 function LegProperties({
   leg,
   idPrefix,
-  stopNames,
+  stops,
 }: {
   leg: TravelLeg;
   idPrefix: string;
-  stopNames: Map<string, string>;
+  stops: TravelStop[];
 }) {
   const updateLegStyle = useEditorStore((state) => state.updateLegStyle);
   const applyLegShapeToAll = useEditorStore((state) => state.applyLegShapeToAll);
+  const updateTravelLeg = useEditorStore((state) => state.updateTravelLeg);
+  const updateLegIcon = useEditorStore((state) => state.updateLegIcon);
+  const project = useEditorStore((state) => state.project);
+  const stopNames = new Map(stops.map((stop) => [stop.id, stop.name]));
+  const iconOptions = [
+    { id: "", name: "None (show transport mode)" },
+    ...builtinIcons,
+    ...project.iconAssets.map((icon) => ({ ...icon, pack: "Imported" as const })),
+  ];
 
   return (
     <section
@@ -292,12 +488,26 @@ function LegProperties({
           {stopNames.get(leg.from)} to {stopNames.get(leg.to)}
         </p>
       </div>
+      <EditLegDialog leg={leg} stops={stops} />
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}leg-icon`}>Symbol (replaces transport label)</Label>
+        <Select value={leg.iconId ?? ""} onValueChange={(value) => updateLegIcon(leg.id, value || undefined)}>
+          <SelectTrigger id={`${idPrefix}leg-icon`} className="w-full"><SelectValue placeholder="None (show transport mode)" /></SelectTrigger>
+          <SelectContent>
+            {iconOptions.map((icon) => <SelectItem key={icon.id || "none"} value={icon.id}>{icon.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+      <label className="flex min-h-9 items-center justify-between gap-3 text-sm">
+        Show destination day on arrow
+        <Switch checked={leg.showDayLabel} onCheckedChange={(checked) => updateTravelLeg(leg.id, { showDayLabel: checked })} />
+      </label>
       <NoiseControl
         id={`${idPrefix}curvature`}
         label="Route curve"
         value={leg.style.curvature}
-        min={-1}
-        max={1}
+        min={-10}
+        max={10}
         step={0.02}
         onChange={(value) => updateLegStyle(leg.id, "curvature", value)}
       />
@@ -312,18 +522,18 @@ function LegProperties({
           </SelectContent>
         </Select>
       </div>
-      <NoiseControl id={`${idPrefix}noise-amplitude`} label="Perlin amplitude" value={leg.style.noiseAmplitude} min={0} max={1} step={0.01} onChange={(value) => updateLegStyle(leg.id, "noiseAmplitude", value)} />
+      <NoiseControl id={`${idPrefix}noise-amplitude`} label="Perlin amplitude" value={leg.style.noiseAmplitude} min={-10} max={10} step={0.01} onChange={(value) => updateLegStyle(leg.id, "noiseAmplitude", value)} />
       <NoiseControl id={`${idPrefix}noise-seed`} label="Noise seed" value={leg.style.noiseSeed} min={0} max={2_147_483_647} step={1} onChange={(value) => updateLegStyle(leg.id, "noiseSeed", Math.round(value))} />
       <NoiseControl id={`${idPrefix}noise-scale`} label="Noise scale" value={leg.style.noiseScale} min={0.25} max={8} step={0.25} onChange={(value) => updateLegStyle(leg.id, "noiseScale", value)} />
       <NoiseControl id={`${idPrefix}noise-octaves`} label="Noise octaves" value={leg.style.noiseOctaves} min={1} max={6} step={1} onChange={(value) => updateLegStyle(leg.id, "noiseOctaves", Math.round(value))} />
-      <NoiseControl id={`${idPrefix}noise-modulation`} label="Noise modulation" value={leg.style.noiseModulation} min={0} max={1} step={0.01} onChange={(value) => updateLegStyle(leg.id, "noiseModulation", value)} />
+      <NoiseControl id={`${idPrefix}noise-modulation`} label="Noise modulation" value={leg.style.noiseModulation} min={-10} max={10} step={0.01} onChange={(value) => updateLegStyle(leg.id, "noiseModulation", value)} />
       <Button variant="outline" size="sm" onClick={() => applyLegShapeToAll(leg.id)}>Apply route shape to all legs</Button>
       <NoiseControl
         id={`${idPrefix}winding`}
         label="Hand-drawn winding"
         value={leg.style.winding}
-        min={0}
-        max={1}
+        min={-10}
+        max={10}
         step={0.02}
         onChange={(value) => updateLegStyle(leg.id, "winding", value)}
       />
@@ -349,6 +559,7 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
   const toggleHillshade = useEditorStore((state) => state.toggleHillshade);
   const setTravelDisplay = useEditorStore((state) => state.setTravelDisplay);
   const setMapStyle = useEditorStore((state) => state.setMapStyle);
+  const setMapBackground = useEditorStore((state) => state.setMapBackground);
   const updatePresentation = useEditorStore((state) => state.updatePresentation);
   const resetPresentation = useEditorStore((state) => state.resetPresentation);
   const presentation = useEditorStore((state) => state.project.presentation);
@@ -386,6 +597,48 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
           No map
         </Button>
       </div>
+      {mapSettings.display === "symbolic" ? (
+        <>
+          <div className="grid gap-1.5">
+            <Label>Background</Label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[
+                { label: "Canvas", value: "#e9efeb" },
+                { label: "Paper", value: "#f5f0e8" },
+                { label: "Slate", value: "#d6dce4" },
+                { label: "Sand", value: "#ede0c8" },
+                { label: "Moss", value: "#dce3d4" },
+                { label: "Dusk", value: "#c8d0d8" },
+              ].map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  title={preset.label}
+                  className="size-7 cursor-pointer rounded-full border border-border/60"
+                  style={{ backgroundColor: preset.value }}
+                  onClick={() => setMapBackground(preset.value)}
+                  aria-label={preset.label}
+                />
+              ))}
+              <input
+                type="color"
+                value={mapSettings.background}
+                onChange={(e) => setMapBackground(e.target.value)}
+                className="size-7 cursor-pointer rounded-full border-0 p-0"
+                title="Custom color"
+                aria-label="Custom background color"
+              />
+            </div>
+          </div>
+          <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
+            Transport icons
+            <Switch
+              checked={presentation.showModeIcons}
+              onCheckedChange={(checked) => updatePresentation("showModeIcons", checked)}
+            />
+          </label>
+        </>
+      ) : null}
       <div className="grid gap-1.5">
         <Label htmlFor={`${idPrefix}basemap-style`}>OpenStreetMap style</Label>
         <Select
@@ -525,7 +778,7 @@ function SelectedProperties({ idPrefix }: { idPrefix: string }) {
       <LegProperties
         leg={leg}
         idPrefix={idPrefix}
-        stopNames={new Map(project.stops.map((item) => [item.id, item.name]))}
+        stops={project.stops}
       />
     );
   }
@@ -551,6 +804,7 @@ function AddTravelObject() {
   const [dayLabel, setDayLabel] = useState("DAY 1");
   const [legName, setLegName] = useState("New travel leg");
   const [mode, setMode] = useState<TravelLeg["mode"]>("drive");
+  const [loopback, setLoopback] = useState(false);
   const stops = project.kind === "travel" ? project.stops : [];
   const longitude =
     stops.reduce((sum, stop) => sum + stop.coordinates[0], 0) /
@@ -591,6 +845,7 @@ function AddTravelObject() {
             onSelect={() => {
               setFrom(project.stops[0]?.id ?? "");
               setTo(project.stops[1]?.id ?? "");
+              setLoopback(false);
               setDialog("leg");
             }}
           >
@@ -621,7 +876,7 @@ function AddTravelObject() {
               className="grid gap-4"
               onSubmit={(event) => {
                 event.preventDefault();
-                addTravelLeg({ name: legName, from, to, mode });
+                addTravelLeg({ name: legName, from, to, mode, loopback });
                 setDialog(null);
               }}
             >
@@ -654,9 +909,19 @@ function AddTravelObject() {
                   </SelectContent>
                 </Select>
               </div>
+              <label className="flex min-h-9 items-center justify-between gap-3 text-sm">
+                Loop back to one stop
+                <Switch
+                  checked={loopback}
+                  onCheckedChange={(checked) => {
+                    setLoopback(checked);
+                    if (checked && from) setTo(from);
+                  }}
+                />
+              </label>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setDialog(null)}>Cancel</Button>
-                <Button type="submit" disabled={!legName.trim() || !from || !to || from === to}>Add leg</Button>
+                <Button type="submit" disabled={!legName.trim() || !from || !to || (from === to && !loopback)}>Add leg</Button>
               </DialogFooter>
             </form>
           ) : (

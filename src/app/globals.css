@@ -141,7 +141,7 @@
 
 @layer utilities {
   .canvas-grid {
-    background-color: var(--canvas);
+    background-color: var(--canvas-bg, var(--canvas));
     background-image:
       linear-gradient(to right, color-mix(in srgb, var(--foreground) 7%, transparent) 1px, transparent 1px),
       linear-gradient(to bottom, color-mix(in srgb, var(--foreground) 7%, transparent) 1px, transparent 1px);
@@ -187,16 +187,16 @@
     height: 1.35rem;
     place-items: center;
     flex: none;
-    border: 2px solid white;
+    border: 2px solid var(--trail);
     border-radius: 999px;
-    background: var(--trail);
+    background: var(--card);
     box-shadow: 0 0 0 1px rgb(24 34 29 / 55%);
   }
 
   .mapper-stop__dot svg {
     width: 0.82rem;
     height: 0.82rem;
-    color: white;
+    color: var(--trail);
   }
 
   .mapper-stop__label {
@@ -234,9 +234,38 @@
     justify-items: end;
   }
 
+  .mapper-stop[data-label-anchor="top"] .mapper-stop__label {
+    left: 50%;
+    top: -0.75rem;
+    justify-items: center;
+    transform: translate(-50%, -100%);
+  }
+
+  .mapper-stop[data-label-anchor="right"] .mapper-stop__label {
+    left: 1.7rem;
+    top: 50%;
+    justify-items: start;
+    transform: translateY(-50%);
+  }
+
+  .mapper-stop[data-label-anchor="bottom"] .mapper-stop__label {
+    left: 50%;
+    top: 2rem;
+    justify-items: center;
+    transform: translateX(-50%);
+  }
+
+  .mapper-stop[data-label-anchor="left"] .mapper-stop__label {
+    right: 1.7rem;
+    top: 50%;
+    justify-items: end;
+    transform: translateY(-50%);
+  }
+
   .mapper-stop__label strong {
-    font-size: calc(0.72rem * var(--mapper-text-scale, 1));
-    font-weight: 800;
+    font-size: calc(0.72rem * var(--mapper-text-scale, 1) * var(--label-font-size, 1));
+    font-weight: var(--label-bold, 800);
+    color: var(--label-color, inherit);
     letter-spacing: 0.01em;
   }
 
@@ -247,7 +276,7 @@
     background: var(--trail);
     color: white;
     font-family: var(--font-plex-mono), monospace;
-    font-size: calc(0.54rem * var(--mapper-text-scale, 1));
+    font-size: calc(0.54rem * var(--mapper-text-scale, 1) * var(--label-font-size, 1));
     font-weight: 600;
     letter-spacing: 0.04em;
     text-shadow: none;

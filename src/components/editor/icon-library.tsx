@@ -1,7 +1,7 @@
 "use client";
 
 import DOMPurify from "dompurify";
-import { FolderOpen, MapPin, RefreshCw, ScatterChart } from "lucide-react";
+import { FolderOpen, Loader2, MapPin, RefreshCw, ScatterChart } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { builtinIcons } from "@/lib/builtin-icons";
+import { getIconSvg, preloadIcons, preloadIconsAsync } from "@/lib/icons";
 import type { IconAsset } from "@/lib/project-schema";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/store/editor-store";
@@ -41,6 +41,7 @@ export function IconLibrary({ children }: { children: React.ReactNode }) {
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [scatterOptions, setScatterOptions] = useState({
     count: 20,
     seed: 42,
@@ -51,7 +52,32 @@ export function IconLibrary({ children }: { children: React.ReactNode }) {
     rotationMin: -15,
     rotationMax: 15,
   });
-  const icons = [...builtinIcons, ...project.iconAssets.map((asset) => ({ ...asset, pack: "Imported" as const }))];
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    preloadIconsAsync().then(() => {
+      if (!cancelled) setLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [open]);
+
+  const builtinIconIds = loaded ? preloadIcons : [];
+
+  const icons = loaded
+    ? [
+        ...builtinIconIds.map((id) => ({
+          id,
+          name: id
+            .split("-")
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(" "),
+          pack: "Lucide" as const,
+          svg: getIconSvg(id, []) ?? "",
+        })),
+        ...project.iconAssets.map((asset) => ({ ...asset, pack: "Imported" as const })),
+      ]
+    : [];
 
   useEffect(() => {
     const openLibrary = () => setOpen(true);
@@ -86,6 +112,12 @@ export function IconLibrary({ children }: { children: React.ReactNode }) {
           </SheetDescription>
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-auto p-4">
+          {!loaded ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground">
+              <Loader2 className="size-6 animate-spin" aria-hidden="true" />
+              <span className="ml-2 text-sm">Loading icons...</span>
+            </div>
+          ) : (<>
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
             {icons.map((icon) => (
               <button
@@ -176,6 +208,7 @@ export function IconLibrary({ children }: { children: React.ReactNode }) {
               <Input id="scatter-scale-max" type="number" min={0.1} max={10} step={0.1} value={scatterOptions.scaleMax} onChange={(event) => setScatterOptions((value) => ({ ...value, scaleMax: Math.min(10, Math.max(0.1, event.currentTarget.valueAsNumber || 0.1)) }))} />
             </div>
           </fieldset>
+          </>)}
         </div>
         <SheetFooter className="grid shrink-0 grid-cols-1 gap-2 border-t bg-popover p-3 min-[420px]:grid-cols-2">
           <Button className="w-full justify-start" variant="outline" onClick={() => inputRef.current?.click()}>
