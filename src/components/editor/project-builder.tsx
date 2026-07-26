@@ -9,15 +9,8 @@ import { tags } from "@lezer/highlight";
 import { Columns2, FileCode2, Maximize2, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { usePanelRef } from "react-resizable-panels";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Drawer,
   DrawerContent,
@@ -25,11 +18,6 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable";
 import { deserializeProject, serializeProject } from "@/lib/project-io";
 import { useEditorStore } from "@/store/editor-store";
 import { getIconIds } from "@/lib/icons";
@@ -104,20 +92,24 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [source, setSource] = useState(() => serializeProject(project));
   const [error, setError] = useState<string | null>(null);
+  const [liveStatus, setLiveStatus] = useState("Live preview ready");
   const [pending, startTransition] = useTransition();
   const [desktop, setDesktop] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
-  const editorPanelRef = usePanelRef();
   const userEdited = useRef(false);
+  const wasOpen = useRef(false);
 
   useEffect(() => {
-    if (open) {
+    if (open && !wasOpen.current) {
       setSource(serializeProject(project));
       userEdited.current = false;
-    } else {
+      setError(null);
+      setLiveStatus("Live preview ready");
+    } else if (!open) {
       userEdited.current = false;
     }
-  }, [open]);
+    wasOpen.current = open;
+  }, [open, project]);
 
   useEffect(() => {
     if (open && !userEdited.current) {
@@ -133,48 +125,48 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
     return () => query.removeEventListener("change", update);
   }, []);
 
-  function showHalfScreen() {
-    setFullscreen(false);
-    requestAnimationFrame(() => editorPanelRef.current?.resize("50%"));
-  }
+  useEffect(() => {
+    if (!open || !userEdited.current) return;
 
-  function showFullScreen() {
-    setFullscreen(true);
-    requestAnimationFrame(() => editorPanelRef.current?.resize("100%"));
-  }
+    setLiveStatus("Checking YAML...");
+    const timeout = window.setTimeout(() => {
+      try {
+        const nextProject = deserializeProject(source);
+        setError(null);
+        setLiveStatus("Updating preview...");
+        startTransition(() => {
+          replaceProject(nextProject);
+          setLiveStatus("Preview updated");
+        });
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "The YAML project is invalid.");
+        setLiveStatus("Preview paused until YAML is valid");
+      }
+    }, 450);
 
-  function applySource() {
-    try {
-      const nextProject = deserializeProject(source);
-      setError(null);
-      startTransition(() => {
-        replaceProject(nextProject);
-        setOpen(false);
-      });
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The YAML project is invalid.");
-    }
-  }
+    return () => window.clearTimeout(timeout);
+  }, [open, replaceProject, source]);
 
   const onChange = useCallback((value: string) => {
     setSource(value);
     userEdited.current = true;
+    setLiveStatus("Waiting for edits...");
   }, []);
 
   const workspace = (
     <div className="flex size-full min-h-0 flex-col bg-[#1e1e1e] text-[#d4d4d4]">
-      <div className="flex min-h-14 shrink-0 items-center gap-3 border-b border-[#2b2b2b] bg-[#181818] px-4 pr-3">
+      <div className="flex min-h-14 shrink-0 items-center gap-3 border-b border-[#2b2b2b] bg-[#181818] px-4 pr-3 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
         <FileCode2 className="size-4 text-[#e8b563]" aria-hidden="true" />
         <div className="min-w-0">
           <h2 className="truncate text-sm font-semibold text-[#f0f0f0]">Project builder</h2>
-          <p className="truncate text-[11px] text-[#9d9d9d]">Validated Mapper YAML</p>
+          <p className="truncate text-[11px] text-[#9d9d9d]">Live YAML preview</p>
         </div>
         {desktop ? (
           <div className="ml-auto flex items-center gap-1">
-            <Button variant="ghost" size="icon-sm" className="text-[#d4d4d4] hover:bg-[#2a2d2e] hover:text-white" onClick={showHalfScreen} aria-label="Set Builder to half screen">
+            <Button variant="ghost" size="icon-sm" className="text-[#d4d4d4] hover:bg-[#2a2d2e] hover:text-white" onClick={() => setFullscreen(false)} aria-label="Dock Builder to the right">
               <Columns2 aria-hidden="true" />
             </Button>
-            <Button variant="ghost" size="icon-sm" className="text-[#d4d4d4] hover:bg-[#2a2d2e] hover:text-white" onClick={showFullScreen} aria-label="Make Builder full screen">
+            <Button variant="ghost" size="icon-sm" className="text-[#d4d4d4] hover:bg-[#2a2d2e] hover:text-white" onClick={() => setFullscreen(true)} aria-label="Make Builder full screen">
               <Maximize2 aria-hidden="true" />
             </Button>
             <Button variant="ghost" size="icon-sm" className="text-[#d4d4d4] hover:bg-[#2a2d2e] hover:text-white" onClick={() => setOpen(false)} aria-label="Close Builder">
@@ -232,16 +224,14 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
             {error}
           </p>
         ) : null}
-        <div className="flex h-6 shrink-0 items-center justify-between bg-[#007acc] px-3 font-mono text-[10px] text-white">
-          <span>Mapper YAML</span>
+        <div className={`flex h-6 shrink-0 items-center justify-between px-3 font-mono text-[10px] text-white ${error ? "bg-[#a1260d]" : pending ? "bg-[#8a6c18]" : "bg-[#007acc]"}`}>
+          <span>{liveStatus}</span>
           <span>YAML | UTF-8 | Spaces: 2</span>
         </div>
-        <div className="flex shrink-0 justify-end gap-2 border-t border-[#2b2b2b] bg-[#181818] p-3">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[#2b2b2b] bg-[#181818] p-3">
+          <p className="text-[11px] text-[#9d9d9d]">Valid edits update the map automatically.</p>
           <Button variant="ghost" className="text-[#d4d4d4] hover:bg-[#2a2d2e] hover:text-white" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-          <Button onClick={applySource} disabled={pending}>
-            {pending ? "Applying..." : "Apply YAML"}
+            Close
           </Button>
         </div>
     </div>
@@ -253,30 +243,18 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
         setFullscreen(false);
         setOpen(true);
       }}>{children}</span>
-      <Dialog open={open && desktop} onOpenChange={setOpen}>
-        <DialogContent
-          showCloseButton={false}
+      {open && desktop ? (
+        <div
+          role="dialog"
+          aria-modal="false"
+          aria-label="Project builder"
           className={fullscreen
-            ? "inset-0 size-full max-w-none translate-x-0 translate-y-0 rounded-none bg-transparent p-0 ring-0"
-            : "inset-0 bottom-0 left-0 top-0 h-full w-full max-w-none translate-x-0 translate-y-0 rounded-none bg-transparent p-0 ring-0"}
+            ? "fixed inset-0 z-50 bg-[#1e1e1e]"
+            : "fixed bottom-4 right-4 top-20 z-50 w-[min(560px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-white/10 bg-[#1e1e1e] shadow-[-16px_24px_60px_rgba(0,0,0,0.38)]"}
         >
-          <DialogTitle className="sr-only">Project builder</DialogTitle>
-          <DialogDescription className="sr-only">Edit and validate the active project YAML.</DialogDescription>
-          <ResizablePanelGroup orientation="horizontal" className="size-full">
-            <ResizablePanel defaultSize="50%" minSize="0%" className="bg-black/40" />
-            <ResizableHandle withHandle className="bg-[#454545]" onDoubleClick={showHalfScreen} />
-            <ResizablePanel
-              panelRef={editorPanelRef}
-              defaultSize="50%"
-              minSize="30%"
-              maxSize="80%"
-              className="shadow-[-10px_0_30px_rgba(0,0,0,0.35)]"
-            >
-              {workspace}
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </DialogContent>
-      </Dialog>
+          {workspace}
+        </div>
+      ) : null}
       <Drawer open={open && !desktop} onOpenChange={setOpen} direction="bottom">
         <DrawerContent className="h-dvh max-h-none rounded-none border-0 p-0">
           <DrawerHeader className="sr-only">
