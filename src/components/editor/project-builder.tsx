@@ -16,7 +16,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogOverlay,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -255,7 +254,6 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
         setOpen(true);
       }}>{children}</span>
       <Dialog open={open && desktop} onOpenChange={setOpen}>
-        <DialogOverlay className="bg-black/30 backdrop-blur-[2px]" />
         <DialogContent
           showCloseButton={false}
           className={fullscreen
