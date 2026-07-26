@@ -8,7 +8,18 @@ import { EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { Columns2, FileCode2, Maximize2, X } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type MouseEvent,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -86,7 +97,11 @@ const accessibleYamlHighlight = HighlightStyle.define([
   { tag: tags.invalid, color: "#ff9b9b", textDecoration: "underline" },
 ]);
 
-export function ProjectBuilder({ children }: { children: React.ReactNode }) {
+type BuilderTriggerProps = {
+  onClick?: (event: MouseEvent) => void;
+};
+
+export function ProjectBuilder({ children }: { children: ReactNode }) {
   const project = useEditorStore((state) => state.project);
   const replaceProject = useEditorStore((state) => state.replaceProject);
   const [open, setOpen] = useState(false);
@@ -152,6 +167,24 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
     userEdited.current = true;
     setLiveStatus("Waiting for edits...");
   }, []);
+
+  function openBuilder() {
+    setFullscreen(false);
+    setOpen(true);
+  }
+
+  const trigger = isValidElement<BuilderTriggerProps>(children)
+    ? cloneElement(children as ReactElement<BuilderTriggerProps>, {
+        onClick: (event) => {
+          children.props.onClick?.(event);
+          if (!event.defaultPrevented) openBuilder();
+        },
+      })
+    : (
+      <span role="button" tabIndex={0} onClick={openBuilder}>
+        {children}
+      </span>
+    );
 
   const workspace = (
     <div className="flex size-full min-h-0 flex-col bg-[#1e1e1e] text-[#d4d4d4]">
@@ -239,10 +272,7 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <span className="contents" onClick={() => {
-        setFullscreen(false);
-        setOpen(true);
-      }}>{children}</span>
+      {trigger}
       {open && desktop ? (
         <div
           role="dialog"
