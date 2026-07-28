@@ -964,6 +964,7 @@ function SelectedProperties({ idPrefix }: { idPrefix: string }) {
   const project = useEditorStore((state) => state.project);
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
   if (project.kind !== "travel") return null;
+  const boundaries = project.boundaries ?? [];
 
   if (selectedObjectId === "terrain-context") {
     return <><FormatPainterControls /><TerrainProperties idPrefix={idPrefix} /></>;
@@ -994,7 +995,7 @@ function SelectedProperties({ idPrefix }: { idPrefix: string }) {
   if (symbol) return <><FormatPainterControls /><SymbolProperties symbol={symbol} idPrefix={idPrefix} /></>;
   const scatter = project.scatter.find((item) => item.id === selectedObjectId);
   if (scatter) return <><FormatPainterControls /><ScatterProperties scatter={scatter} idPrefix={idPrefix} /></>;
-  const boundary = project.boundaries.find((item) => item.id === selectedObjectId);
+  const boundary = boundaries.find((item) => item.id === selectedObjectId);
   if (boundary) return <><FormatPainterControls /><BoundaryProperties boundary={boundary} idPrefix={idPrefix} /></>;
 
   return (
@@ -1193,6 +1194,7 @@ export function ObjectPanel({
   const project = useEditorStore((state) => state.project);
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
   const selectObject = useEditorStore((state) => state.selectObject);
+  const boundaries = project.kind === "travel" ? project.boundaries ?? [] : [];
 
   if (project.kind !== "travel") {
     return <TrailObjectPanel idPrefix={idPrefix} onObjectSelected={onObjectSelected} />;
@@ -1354,10 +1356,10 @@ export function ObjectPanel({
             </ol>
           </CollapsibleSection>
           ) : null}
-          {project.boundaries.length ? (
-          <CollapsibleSection id={`${idPrefix}travel-boundaries`} label="Boundaries" count={project.boundaries.length}>
+          {boundaries.length ? (
+          <CollapsibleSection id={`${idPrefix}travel-boundaries`} label="Boundaries" count={boundaries.length}>
             <ol>
-            {project.boundaries.map((boundary, index) => (
+            {boundaries.map((boundary, index) => (
               <ObjectRow
                 key={boundary.id}
                 id={boundary.id}

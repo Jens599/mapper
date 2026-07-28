@@ -318,7 +318,7 @@ export const useEditorStore = create<EditorState>()(
             );
             state.project.symbols = state.project.symbols.filter((symbol) => !ids.has(symbol.id));
           state.project.scatter = state.project.scatter.filter((scatter) => !ids.has(scatter.id));
-          state.project.boundaries = state.project.boundaries.filter((boundary) => !ids.has(boundary.id));
+          state.project.boundaries = (state.project.boundaries ?? []).filter((boundary) => !ids.has(boundary.id));
           state.selectedObjectId = state.project.legs[0]?.id ?? state.project.stops[0]?.id ?? null;
             state.selectedIds = state.selectedObjectId ? [state.selectedObjectId] : [];
             return;
@@ -363,7 +363,7 @@ export const useEditorStore = create<EditorState>()(
             scatter.visible = !scatter.visible;
             return;
           }
-          const boundary = state.project.boundaries.find((item) => item.id === id);
+          const boundary = (state.project.boundaries ?? []).find((item) => item.id === id);
           if (boundary) boundary.visible = !boundary.visible;
           return;
         }
@@ -622,6 +622,7 @@ export const useEditorStore = create<EditorState>()(
     addBoundaryAsset: (boundary) => {
       set((state) => {
         if (state.project.kind !== "travel") return;
+        state.project.boundaries ??= [];
         const ids = new Set(state.project.boundaries.map((item) => item.id));
         let id = boundary.id;
         let index = 2;
@@ -637,7 +638,7 @@ export const useEditorStore = create<EditorState>()(
     updateBoundaryAsset: (id, update) => {
       set((state) => {
         if (state.project.kind !== "travel") return;
-        const boundary = state.project.boundaries.find((item) => item.id === id);
+        const boundary = (state.project.boundaries ?? []).find((item) => item.id === id);
         if (!boundary) return;
         if (update.name?.trim()) boundary.name = update.name.trim().slice(0, 100);
         if (update.fill) boundary.fill = update.fill;

@@ -225,6 +225,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const viewHeight = 700 / viewport.zoom;
   const canvasFg = foregroundFromBackground(project.map.background);
   const canvasMuted = mutedFromBackground(project.map.background);
+  const boundaries = project.boundaries ?? [];
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -440,17 +441,17 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           </g>
         ) : null}
 
-        {project.boundaries.filter((boundary) => boundary.visible).map((boundary, index) => (
+        {boundaries.filter((boundary) => boundary.visible).map((boundary, index) => (
           <g key={boundary.id} transform={`translate(90 ${126 + index * 22}) scale(0.82)`} pointerEvents="none">
             <path d={boundary.path} fill={boundary.fill} stroke={boundary.stroke} strokeWidth="1.5" opacity={boundary.opacity} />
           </g>
         ))}
 
-        {(showMapSilhouette || project.boundaries.some((boundary) => boundary.visible)) ? (
+        {(showMapSilhouette || boundaries.some((boundary) => boundary.visible)) ? (
           <g transform="translate(54 662)" pointerEvents="none">
             <rect x="0" y="-13" width="330" height="20" rx="10" fill="var(--canvas-muted, var(--muted))" opacity="0.72" />
             <text x="12" y="0" fill="var(--canvas-fg, var(--muted-foreground))" fontSize="7.5" fontFamily="monospace" opacity="0.72">
-              {showMapSilhouette ? nepalBoundary.attribution : project.boundaries.find((boundary) => boundary.visible)?.attribution}
+              {showMapSilhouette ? nepalBoundary.attribution : boundaries.find((boundary) => boundary.visible)?.attribution}
             </text>
           </g>
         ) : null}

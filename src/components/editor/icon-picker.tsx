@@ -86,8 +86,13 @@ export function IconPicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [loadedTick, setLoadedTick] = useState(0);
+  const [hydrated, setHydrated] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const selectedId = value || null;
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   const allOptions = useMemo<IconOption[]>(() => {
     void loadedTick;
@@ -171,7 +176,7 @@ export function IconPicker({
         onClick={() => setOpen((current) => !current)}
       >
         <span className="flex min-w-0 items-center gap-2">
-          <IconPreview svg={selected?.svg ?? null} className="size-5 shrink-0" />
+          <IconPreview svg={hydrated ? selected?.svg ?? null : null} className="size-5 shrink-0" />
           <span className="min-w-0 text-left">
             <span className="block truncate text-[13px] font-semibold">
               {selected?.name ?? "No icon"}
@@ -223,7 +228,7 @@ export function IconPicker({
                   )}
                   onClick={() => void chooseIcon(option)}
                 >
-                  <IconPreview svg={option.svg} className="size-8 shrink-0 rounded-md border bg-card p-1.5" />
+                  <IconPreview svg={hydrated ? option.svg : null} className="size-8 shrink-0 rounded-md border bg-card p-1.5" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold">{option.name}</span>
                     <span className="block truncate font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
