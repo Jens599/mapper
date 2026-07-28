@@ -40,7 +40,10 @@ const CodeMirror = dynamic(() => import("@uiw/react-codemirror"), {
 
 const mapperCompletions = [
   "version", "kind", "id", "name", "durationDays", "subtitle", "presentation",
-  "lineScale", "textScale", "symbolScale", "showModeIcons", "map", "display", "style",
+  "lineScale", "textScale", "symbolScale", "showModeIcons", "showLineHalo", "showLegend",
+  "showTitleBlock", "showMapSilhouette", "showLeaderLines", "emphasizeEndpoints",
+  "sequentialDayLabels", "extraArrowheads", "vividTransportColors", "fillCanvas",
+  "largerDayText", "map", "display", "style",
   "showContours", "showHillshade", "contourInterval", "elevationUnits", "background",
   "stops", "coordinates", "dayLabel", "icon", "elevation", "labelOffset", "labelAnchor",
   "labelStyle", "fontSize", "bold", "color", "legs", "from",

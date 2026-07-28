@@ -123,14 +123,32 @@ function resolveSvgVariables(svg: SVGSVGElement) {
     "--trail": "#ad4a24",
     "--card": "#f8faf8",
     "--foreground": "#18221d",
+    "--muted": "#eef2ef",
+    "--muted-foreground": "#5f6b63",
     "--canvas": "#e9efeb",
+    "--canvas-bg": "#e9efeb",
+    "--canvas-fg": "#18221d",
+    "--canvas-muted": "#dce4df",
     "--water": "#216b8b",
   };
+  const source = document.querySelector<HTMLElement>("[data-export-root]");
+  if (source) {
+    const style = getComputedStyle(source);
+    for (const name of ["--canvas-bg", "--canvas-fg", "--canvas-muted"]) {
+      const value = style.getPropertyValue(name).trim();
+      if (value) variables[name] = value;
+    }
+  }
   const walker = document.createTreeWalker(svg, NodeFilter.SHOW_ELEMENT);
   let node: Element | null;
   while ((node = walker.nextNode() as Element | null) !== null) {
     for (const attr of Array.from(node.attributes)) {
-      const resolved = attr.value.replace(/var\((--[\w-]+)\)/g, (_, name) => variables[name] ?? attr.value);
+      const resolved = attr.value
+        .replace(/var\(--canvas-fg, var\(--foreground\)\)/g, variables["--canvas-fg"])
+        .replace(/var\(--canvas-muted, var\(--muted\)\)/g, variables["--canvas-muted"])
+        .replace(/var\(--canvas-fg, var\(--muted-foreground\)\)/g, variables["--canvas-fg"])
+        .replace(/var\(--canvas-fg, var\(--trail\)\)/g, variables["--canvas-fg"])
+        .replace(/var\((--[\w-]+)\)/g, (_, name) => variables[name] ?? attr.value);
       if (resolved !== attr.value) {
         node.setAttribute(attr.name, resolved);
       }
@@ -138,18 +156,38 @@ function resolveSvgVariables(svg: SVGSVGElement) {
   }
 }
 
+function serializeCanvasSvg(project: MapperProject, includeBackground: boolean) {
+  const canvas = document.querySelector<SVGSVGElement>("[data-export-canvas]");
+  if (!canvas) throw new Error("Canvas is not ready to export.");
+  const root = document.querySelector<HTMLElement>("[data-export-root]");
+  const clone = canvas.cloneNode(true) as SVGSVGElement;
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.removeAttribute("class");
+  clone.removeAttribute("style");
+  clone.setAttribute("width", String(root?.clientWidth || 1000));
+  clone.setAttribute("height", String(root?.clientHeight || 700));
+  clone.querySelectorAll("[data-export-ignore]").forEach((node) => node.remove());
+  resolveSvgVariables(clone);
+  if (includeBackground) {
+    const background = project.kind === "trail" ? project.canvas.background : project.map.background;
+    const viewBox = clone.viewBox.baseVal;
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("x", String(viewBox.x));
+    rect.setAttribute("y", String(viewBox.y));
+    rect.setAttribute("width", String(viewBox.width || root?.clientWidth || 1000));
+    rect.setAttribute("height", String(viewBox.height || root?.clientHeight || 700));
+    rect.setAttribute("fill", background);
+    clone.insertBefore(rect, clone.firstChild);
+  }
+  return new XMLSerializer().serializeToString(clone);
+}
+
 export function exportTransparentSvg(project: MapperProject) {
   let source: string;
   if (project.kind === "travel" && project.map.display === "geographic") {
     source = buildTravelOverlaySvg(project);
   } else {
-    const canvas = document.querySelector<SVGSVGElement>("[data-export-canvas]");
-    if (!canvas) throw new Error("The No map canvas is not ready to export.");
-    const clone = canvas.cloneNode(true) as SVGSVGElement;
-    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-    clone.removeAttribute("class");
-    resolveSvgVariables(clone);
-    source = new XMLSerializer().serializeToString(clone);
+    source = serializeCanvasSvg(project, false);
   }
   downloadBlob(
     new Blob([source], { type: "image/svg+xml;charset=utf-8" }),
@@ -158,9 +196,21 @@ export function exportTransparentSvg(project: MapperProject) {
 }
 
 export async function exportSvgWithBackground(project: MapperProject) {
+  if (project.kind !== "travel" || project.map.display !== "geographic") {
+    const source = serializeCanvasSvg(project, true);
+    downloadBlob(
+      new Blob([source], { type: "image/svg+xml;charset=utf-8" }),
+      `${safeFilename(project.name)}-map.svg`,
+    );
+    return;
+  }
   const root = document.querySelector<HTMLElement>("[data-export-root]");
   if (!root) throw new Error("Canvas is not ready to export.");
-  const image = await toPng(root, { pixelRatio: 2, cacheBust: true });
+  const image = await toPng(root, {
+    pixelRatio: 2,
+    cacheBust: true,
+    filter: (node) => !(node instanceof Element && node.hasAttribute("data-export-ignore")),
+  });
   const width = root.clientWidth * 2;
   const height = root.clientHeight * 2;
   const source = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#e9efeb"/><image href="${image}" width="${width}" height="${height}"/></svg>`;
@@ -177,6 +227,7 @@ export async function exportPng(project: MapperProject) {
     pixelRatio: 2,
     cacheBust: true,
     backgroundColor: project.kind === "trail" ? project.canvas.background : project.map.background,
+    filter: (node) => !(node instanceof Element && node.hasAttribute("data-export-ignore")),
   });
   const response = await fetch(dataUrl);
   downloadBlob(await response.blob(), `${safeFilename(project.name)}.png`);

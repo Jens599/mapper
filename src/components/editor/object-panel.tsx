@@ -65,6 +65,20 @@ const modeIcons = {
   boat: Ship,
 } as const;
 
+const symbolicPresentationOptions = [
+  ["Line background", "showLineHalo"],
+  ["Legend", "showLegend"],
+  ["Title/subtitle", "showTitleBlock"],
+  ["Nepal silhouette", "showMapSilhouette"],
+  ["Label leader lines", "showLeaderLines"],
+  ["Start/finish emphasis", "emphasizeEndpoints"],
+  ["Sequential day labels", "sequentialDayLabels"],
+  ["Extra arrowheads", "extraArrowheads"],
+  ["Stronger route colors", "vividTransportColors"],
+  ["Fill canvas", "fillCanvas"],
+  ["Larger day text", "largerDayText"],
+] as const;
+
 function CollapsibleSection({
   id,
   label,
@@ -563,6 +577,9 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
   const updatePresentation = useEditorStore((state) => state.updatePresentation);
   const resetPresentation = useEditorStore((state) => state.resetPresentation);
   const presentation = useEditorStore((state) => state.project.presentation);
+  const lineScale = Number.isFinite(presentation.lineScale) ? presentation.lineScale : 1;
+  const textScale = Number.isFinite(presentation.textScale) ? presentation.textScale : 1;
+  const symbolScale = Number.isFinite(presentation.symbolScale) ? presentation.symbolScale : 1;
 
   if (!mapSettings) return null;
 
@@ -637,6 +654,15 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
               onCheckedChange={(checked) => updatePresentation("showModeIcons", checked)}
             />
           </label>
+          {symbolicPresentationOptions.map(([label, key]) => (
+            <label key={key} className="flex min-h-8 items-center justify-between gap-3 text-sm">
+              {label}
+              <Switch
+                checked={Boolean(presentation[key])}
+                onCheckedChange={(checked) => updatePresentation(key, checked)}
+              />
+            </label>
+          ))}
         </>
       ) : null}
       <div className="grid gap-1.5">
@@ -686,9 +712,9 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
           Presentation scale
         </p>
         <Button variant="outline" size="sm" onClick={resetPresentation}>Reset scales</Button>
-        <NoiseControl id={`${idPrefix}line-scale`} label="Lines" value={presentation.lineScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("lineScale", value)} />
-        <NoiseControl id={`${idPrefix}text-scale`} label="Text" value={presentation.textScale} min={0.5} max={3} step={0.05} onChange={(value) => updatePresentation("textScale", value)} />
-        <NoiseControl id={`${idPrefix}symbol-global-scale`} label="Symbols" value={presentation.symbolScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("symbolScale", value)} />
+        <NoiseControl id={`${idPrefix}line-scale`} label="Lines" value={lineScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("lineScale", value)} />
+        <NoiseControl id={`${idPrefix}text-scale`} label="Text" value={textScale} min={0.5} max={3} step={0.05} onChange={(value) => updatePresentation("textScale", value)} />
+        <NoiseControl id={`${idPrefix}symbol-global-scale`} label="Symbols" value={symbolScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("symbolScale", value)} />
       </div>
     </section>
   );

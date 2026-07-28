@@ -46,14 +46,17 @@ export function getWrappedLongitudeBounds(longitudes: number[]): [number, number
 export function getSymbolicStopPositions(project: TravelProject) {
   const positions = new Map<string, { x: number; y: number }>();
   const count = Math.max(1, project.stops.length - 1);
+  const fillCanvas = project.presentation.fillCanvas;
 
   project.stops.forEach((stop, index) => {
     const progress = index / count;
     positions.set(
       stop.id,
       stop.diagramPosition ?? {
-        x: 850 - progress * 700,
-        y: 505 - progress * 355 + Math.sin(index * 1.65) * 58,
+        x: fillCanvas ? 900 - progress * 800 : 850 - progress * 700,
+        y: fillCanvas
+          ? 570 - progress * 430 + Math.sin(index * 1.65) * 78
+          : 505 - progress * 355 + Math.sin(index * 1.65) * 58,
       },
     );
   });

@@ -535,6 +535,17 @@ export const useEditorStore = create<EditorState>()(
           textScale: 1,
           symbolScale: 1,
           showModeIcons: false,
+          showLineHalo: true,
+          showLegend: false,
+          showTitleBlock: true,
+          showMapSilhouette: false,
+          showLeaderLines: false,
+          emphasizeEndpoints: false,
+          sequentialDayLabels: false,
+          extraArrowheads: false,
+          vividTransportColors: false,
+          fillCanvas: false,
+          largerDayText: false,
         };
       });
     },
