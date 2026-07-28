@@ -5,6 +5,7 @@ import { Noise } from "noisejs";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { nepalBoundary } from "@/data/nepal-boundary";
 import { getIconSvg, getPointIconSvg, sizeIconSvg } from "@/lib/builtin-icons";
 import { foregroundFromBackground, mutedFromBackground } from "@/lib/color-utils";
 import type { Coordinate, TravelProject, TravelScatter } from "@/lib/project-schema";
@@ -178,9 +179,6 @@ function directionArrowheads(path: string) {
     return start && end ? [{ start, end }] : [];
   });
 }
-
-const nepalOutlinePath =
-  "M72 398 L95 378 L123 372 L151 345 L178 332 L202 309 L229 298 L262 272 L301 282 L329 265 L366 271 L391 287 L421 308 L459 322 L498 316 L526 267 L564 244 L598 298 L633 325 L668 349 L702 337 L715 343 L705 381 L739 388 L782 380 L807 415 L828 444 L840 406 L886 432 L945 435 L984 454 L1033 455 L1077 443 L1095 605 L1075 661 L1029 655 L988 664 L943 637 L914 650 L840 628 L798 632 L739 605 L685 577 L641 524 L561 507 L488 504 L442 508 L406 492 L401 472 L382 475 L350 462 L322 442 L298 449 L264 429 L230 410 L196 373 L151 347 L124 348 L101 330 L67 303 L80 270 L98 247 L90 226 L120 173 L154 141 L174 113 L200 139 L223 132 L227 135 L242 139 L255 158 L280 154 L289 206 L262 233 L250 259 L258 268 L241 282 L245 292 L252 302 L260 309 L262 318 L254 321 L249 306 L232 301 L216 312 L189 295 L204 305 L209 310 L214 307 L218 310 L224 329 L222 339 L197 365 Z";
 
 export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const selectObject = useEditorStore((state) => state.selectObject);
@@ -428,22 +426,31 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
         {showMapSilhouette ? (
           <g transform="translate(20 10) scale(0.86)" pointerEvents="none">
             <path
-              d={nepalOutlinePath}
+              d={nepalBoundary.path}
               fill="var(--canvas-fg, var(--foreground))"
               opacity="0.055"
             />
             <path
-              d={nepalOutlinePath}
+              d={nepalBoundary.path}
               fill="none"
               stroke="var(--canvas-fg, var(--foreground))"
               strokeWidth="2"
               opacity="0.09"
             />
             <text x="86" y="642" fill="var(--canvas-fg, var(--muted-foreground))" fontSize="7" fontFamily="monospace" opacity="0.45">
-              Nepal outline adapted from Wikimedia Commons / Natural Earth
+              {nepalBoundary.attribution}
             </text>
           </g>
         ) : null}
+
+        {project.boundaries.filter((boundary) => boundary.visible).map((boundary, index) => (
+          <g key={boundary.id} transform={`translate(24 ${180 + index * 18}) scale(0.9)`} pointerEvents="none">
+            <path d={boundary.path} fill={boundary.fill} stroke={boundary.stroke} strokeWidth="1.5" opacity={boundary.opacity} />
+            <text x="18" y="350" fill="var(--canvas-fg, var(--muted-foreground))" fontSize="7" fontFamily="monospace" opacity="0.45">
+              {boundary.attribution}
+            </text>
+          </g>
+        ))}
 
         {showTitleBlock ? (
           <g

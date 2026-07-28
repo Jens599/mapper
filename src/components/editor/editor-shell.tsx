@@ -7,6 +7,7 @@ import {
   FolderOpen,
   HelpCircle,
   Map,
+  MapPinned,
   MapPin,
   Mountain,
   PanelLeftOpen,
@@ -79,13 +80,11 @@ function ContourMark() {
       aria-hidden="true"
       fill="none"
     >
-      <path
-        d="M3 22c6-8 9 4 15-5s8-3 13-8M3 28c7-7 12 2 17-4s7-5 11-5M4 13c5-6 9 1 14-5s8-3 12-4"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <circle cx="18" cy="17" r="2.5" fill="var(--trail)" />
+      <rect x="3" y="3" width="28" height="28" rx="8" fill="var(--card)" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M9 22 14 14l4 5 3-4 5 7" stroke="var(--terrain)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 25c5-5 9 3 14-3 2.3-2.7 3.5-3.8 5-4" stroke="var(--water)" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="14" cy="14" r="2.4" fill="var(--trail)" />
+      <path d="M24 9v6M21 12h6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
   );
 }
@@ -293,6 +292,12 @@ function TopBar() {
             <span className="hidden lg:inline">Symbols</span>
           </Button>
         </IconLibrary>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/admin/boundaries" aria-label="Open boundary admin">
+            <MapPinned aria-hidden="true" />
+            <span className="hidden lg:inline">Boundaries</span>
+          </Link>
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm">

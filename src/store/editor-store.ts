@@ -7,6 +7,7 @@ import { sampleProject } from "@/data/sample-project";
 import { sampleTrailProject } from "@/data/sample-trail-project";
 import type {
   IconAsset,
+  BoundaryAsset,
   LegStyle,
   MapperProject,
   PresentationSettings,
@@ -51,6 +52,7 @@ export type TravelLegUpdate = Partial<
 >;
 
 export type ProjectMetaUpdate = Partial<Pick<TravelProject, "name" | "subtitle" | "durationDays">>;
+export type BoundaryUpdate = Partial<Pick<BoundaryAsset, "name" | "fill" | "stroke" | "opacity" | "visible">>;
 
 type FormatClipboard =
   | {
@@ -201,7 +203,9 @@ type EditorState = {
      value: TrailNoise[Key],
    ) => void;
    selectIcon: (iconId: string) => void;
-   addIconAssets: (assets: IconAsset[]) => void;
+    addIconAssets: (assets: IconAsset[]) => void;
+    addBoundaryAsset: (boundary: BoundaryAsset) => void;
+    updateBoundaryAsset: (id: string, update: BoundaryUpdate) => void;
    placeSelectedIcon: () => void;
    placePOISymbol: (coordinates: [number, number]) => void;
    scatterSelectedIcon: (options: ScatterOptions) => void;
@@ -313,8 +317,9 @@ export const useEditorStore = create<EditorState>()(
               (leg) => !ids.has(leg.id) && !deletedStops.has(leg.from) && !deletedStops.has(leg.to),
             );
             state.project.symbols = state.project.symbols.filter((symbol) => !ids.has(symbol.id));
-            state.project.scatter = state.project.scatter.filter((scatter) => !ids.has(scatter.id));
-            state.selectedObjectId = state.project.legs[0]?.id ?? state.project.stops[0]?.id ?? null;
+          state.project.scatter = state.project.scatter.filter((scatter) => !ids.has(scatter.id));
+          state.project.boundaries = state.project.boundaries.filter((boundary) => !ids.has(boundary.id));
+          state.selectedObjectId = state.project.legs[0]?.id ?? state.project.stops[0]?.id ?? null;
             state.selectedIds = state.selectedObjectId ? [state.selectedObjectId] : [];
             return;
           }
@@ -354,7 +359,12 @@ export const useEditorStore = create<EditorState>()(
             return;
           }
           const scatter = state.project.scatter.find((item) => item.id === id);
-          if (scatter) scatter.visible = !scatter.visible;
+          if (scatter) {
+            scatter.visible = !scatter.visible;
+            return;
+          }
+          const boundary = state.project.boundaries.find((item) => item.id === id);
+          if (boundary) boundary.visible = !boundary.visible;
           return;
         }
 
@@ -607,6 +617,33 @@ export const useEditorStore = create<EditorState>()(
     addIconAssets: (assets) => {
       set((state) => {
         state.project.iconAssets.push(...assets);
+      });
+    },
+    addBoundaryAsset: (boundary) => {
+      set((state) => {
+        if (state.project.kind !== "travel") return;
+        const ids = new Set(state.project.boundaries.map((item) => item.id));
+        let id = boundary.id;
+        let index = 2;
+        while (ids.has(id)) {
+          id = `${boundary.id}-${index}`;
+          index += 1;
+        }
+        state.project.boundaries.push({ ...boundary, id });
+        state.selectedObjectId = id;
+        state.selectedIds = [id];
+      });
+    },
+    updateBoundaryAsset: (id, update) => {
+      set((state) => {
+        if (state.project.kind !== "travel") return;
+        const boundary = state.project.boundaries.find((item) => item.id === id);
+        if (!boundary) return;
+        if (update.name?.trim()) boundary.name = update.name.trim().slice(0, 100);
+        if (update.fill) boundary.fill = update.fill;
+        if (update.stroke) boundary.stroke = update.stroke;
+        if (update.opacity !== undefined && Number.isFinite(update.opacity)) boundary.opacity = Math.min(1, Math.max(0, update.opacity));
+        if (update.visible !== undefined) boundary.visible = update.visible;
       });
     },
     placeSelectedIcon: () => {

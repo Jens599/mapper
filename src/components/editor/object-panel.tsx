@@ -13,14 +13,17 @@ import {
   Pencil,
   Plane,
   Plus,
+  Search,
   Ship,
   TrainFront,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { NoiseControl } from "@/components/editor/noise-control";
+import { IconPicker } from "@/components/editor/icon-picker";
 import { TrailObjectPanel } from "@/components/editor/trail-object-panel";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,8 +59,8 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { builtinIcons } from "@/lib/builtin-icons";
-import type { TravelLeg, TravelScatter, TravelStop } from "@/lib/project-schema";
+import { boundaryFromGeoJson, fetchOsmBoundary } from "@/lib/boundary-utils";
+import type { BoundaryAsset, TravelLeg, TravelScatter, TravelStop } from "@/lib/project-schema";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/store/editor-store";
 
@@ -324,9 +327,6 @@ function StopProperties({
   const updatePointIcon = useEditorStore((state) => state.updatePointIcon);
   const updateTravelStop = useEditorStore((state) => state.updateTravelStop);
   const project = useEditorStore((state) => state.project);
-  const iconOptions = project.kind === "travel"
-    ? [...builtinIcons, ...project.iconAssets.map((icon) => ({ ...icon, pack: "Imported" as const }))]
-    : builtinIcons;
   return (
     <section
       aria-labelledby={`${idPrefix}stop-properties`}
@@ -367,12 +367,12 @@ function StopProperties({
       </dl>
       <div className="grid gap-1.5">
         <Label htmlFor={`${idPrefix}stop-symbol`}>Point symbol</Label>
-        <Select value={stop.icon} onValueChange={(value) => value && updatePointIcon(stop.id, value)}>
-          <SelectTrigger id={`${idPrefix}stop-symbol`} className="w-full"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {iconOptions.map((icon) => <SelectItem key={icon.id} value={icon.id}>{icon.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <IconPicker
+          value={stop.icon}
+          onValueChange={(value) => value && updatePointIcon(stop.id, value)}
+          customIcons={project.kind === "travel" ? project.iconAssets : []}
+          label="Point symbol"
+        />
       </div>
       <p className="border-l-2 border-water pl-3 text-xs leading-5 text-muted-foreground">
         Point style
@@ -500,12 +500,6 @@ function LegProperties({
   const updateLegIcon = useEditorStore((state) => state.updateLegIcon);
   const project = useEditorStore((state) => state.project);
   const stopNames = new Map(stops.map((stop) => [stop.id, stop.name]));
-  const iconOptions = [
-    { id: "", name: "None (show transport mode)" },
-    ...builtinIcons,
-    ...project.iconAssets.map((icon) => ({ ...icon, pack: "Imported" as const })),
-  ];
-
   return (
     <section
       aria-labelledby={`${idPrefix}leg-properties`}
@@ -525,12 +519,13 @@ function LegProperties({
       <EditLegDialog leg={leg} stops={stops} />
       <div className="grid gap-1.5">
         <Label htmlFor={`${idPrefix}leg-icon`}>Symbol (replaces transport label)</Label>
-        <Select value={leg.iconId ?? ""} onValueChange={(value) => updateLegIcon(leg.id, value || undefined)}>
-          <SelectTrigger id={`${idPrefix}leg-icon`} className="w-full"><SelectValue placeholder="None (show transport mode)" /></SelectTrigger>
-          <SelectContent>
-            {iconOptions.map((icon) => <SelectItem key={icon.id || "none"} value={icon.id}>{icon.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <IconPicker
+          value={leg.iconId ?? null}
+          onValueChange={(value) => updateLegIcon(leg.id, value || undefined)}
+          customIcons={project.kind === "travel" ? project.iconAssets : []}
+          label="Leg symbol"
+          allowNone
+        />
       </div>
       <label className="flex min-h-9 items-center justify-between gap-3 text-sm">
         Show destination day on arrow
@@ -596,12 +591,40 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
   const setMapBackground = useEditorStore((state) => state.setMapBackground);
   const updatePresentation = useEditorStore((state) => state.updatePresentation);
   const resetPresentation = useEditorStore((state) => state.resetPresentation);
+  const addBoundaryAsset = useEditorStore((state) => state.addBoundaryAsset);
   const presentation = useEditorStore((state) => state.project.presentation);
+  const [boundaryQuery, setBoundaryQuery] = useState("Nepal");
+  const [boundaryStatus, setBoundaryStatus] = useState<string | null>(null);
+  const [boundaryBusy, setBoundaryBusy] = useState(false);
   const lineScale = Number.isFinite(presentation.lineScale) ? presentation.lineScale : 1;
   const textScale = Number.isFinite(presentation.textScale) ? presentation.textScale : 1;
   const symbolScale = Number.isFinite(presentation.symbolScale) ? presentation.symbolScale : 1;
 
   if (!mapSettings) return null;
+
+  async function importOsmBoundary() {
+    setBoundaryBusy(true);
+    setBoundaryStatus(null);
+    try {
+      addBoundaryAsset(await fetchOsmBoundary(boundaryQuery));
+      setBoundaryStatus("Boundary imported from OpenStreetMap.");
+    } catch (reason) {
+      setBoundaryStatus(reason instanceof Error ? reason.message : "Boundary import failed.");
+    } finally {
+      setBoundaryBusy(false);
+    }
+  }
+
+  async function importBoundaryFile(file: File | undefined) {
+    if (!file) return;
+    setBoundaryStatus(null);
+    try {
+      addBoundaryAsset(boundaryFromGeoJson(JSON.parse(await file.text()), file.name.replace(/\.geojson|\.json$/i, "")));
+      setBoundaryStatus("Boundary imported from GeoJSON.");
+    } catch (reason) {
+      setBoundaryStatus(reason instanceof Error ? reason.message : "GeoJSON import failed.");
+    }
+  }
 
   return (
     <section
@@ -727,6 +750,27 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
           <dd className="font-mono">Mapzen DEM</dd>
         </div>
       </dl>
+      {mapSettings.display === "symbolic" ? (
+        <div className="grid gap-3 border-t pt-4">
+          <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+            Boundary assets
+          </p>
+          <div className="grid gap-2">
+            <Label htmlFor={`${idPrefix}boundary-search`}>OpenStreetMap place</Label>
+            <div className="flex gap-2">
+              <Input id={`${idPrefix}boundary-search`} value={boundaryQuery} onChange={(event) => setBoundaryQuery(event.currentTarget.value)} placeholder="Nepal, Gandaki Province..." />
+              <Button type="button" variant="outline" size="icon" disabled={boundaryBusy || !boundaryQuery.trim()} onClick={() => void importOsmBoundary()} aria-label="Import OSM boundary">
+                <Search aria-hidden="true" />
+              </Button>
+            </div>
+          </div>
+          <label className="focus-ring flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border bg-card px-3 text-sm font-medium hover:bg-muted">
+            <Upload aria-hidden="true" className="size-4" /> Upload GeoJSON boundary
+            <input type="file" accept=".geojson,.json,application/geo+json,application/json" className="sr-only" onChange={(event) => void importBoundaryFile(event.currentTarget.files?.[0])} />
+          </label>
+          {boundaryStatus ? <p className="text-xs leading-5 text-muted-foreground">{boundaryStatus}</p> : null}
+        </div>
+      ) : null}
       <div className="grid gap-4 border-t pt-4">
         <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
           Presentation scale
@@ -841,6 +885,36 @@ function SymbolProperties({
   );
 }
 
+function BoundaryProperties({ boundary, idPrefix }: { boundary: BoundaryAsset; idPrefix: string }) {
+  const updateBoundaryAsset = useEditorStore((state) => state.updateBoundaryAsset);
+  return (
+    <section aria-labelledby={`${idPrefix}boundary-properties`} className="grid gap-4 p-4">
+      <div>
+        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-terrain">Boundary asset</p>
+        <h2 id={`${idPrefix}boundary-properties`} className="mt-1 text-sm font-bold">{boundary.name}</h2>
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}boundary-name`}>Name</Label>
+        <Input id={`${idPrefix}boundary-name`} value={boundary.name} maxLength={100} onChange={(event) => updateBoundaryAsset(boundary.id, { name: event.currentTarget.value })} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-1.5">
+          <Label htmlFor={`${idPrefix}boundary-fill`}>Fill</Label>
+          <input id={`${idPrefix}boundary-fill`} type="color" value={boundary.fill} onChange={(event) => updateBoundaryAsset(boundary.id, { fill: event.currentTarget.value })} className="h-8 w-full cursor-pointer rounded border bg-transparent p-0.5" />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor={`${idPrefix}boundary-stroke`}>Stroke</Label>
+          <input id={`${idPrefix}boundary-stroke`} type="color" value={boundary.stroke} onChange={(event) => updateBoundaryAsset(boundary.id, { stroke: event.currentTarget.value })} className="h-8 w-full cursor-pointer rounded border bg-transparent p-0.5" />
+        </div>
+      </div>
+      <NoiseControl id={`${idPrefix}boundary-opacity`} label="Opacity" value={boundary.opacity} min={0} max={1} step={0.01} onChange={(value) => updateBoundaryAsset(boundary.id, { opacity: value })} />
+      <p className="border-l-2 border-terrain pl-3 text-xs leading-5 text-muted-foreground">
+        {boundary.attribution}. Source: {boundary.source || "project asset"}.
+      </p>
+    </section>
+  );
+}
+
 function FormatPainterControls() {
   const project = useEditorStore((state) => state.project);
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
@@ -920,6 +994,8 @@ function SelectedProperties({ idPrefix }: { idPrefix: string }) {
   if (symbol) return <><FormatPainterControls /><SymbolProperties symbol={symbol} idPrefix={idPrefix} /></>;
   const scatter = project.scatter.find((item) => item.id === selectedObjectId);
   if (scatter) return <><FormatPainterControls /><ScatterProperties scatter={scatter} idPrefix={idPrefix} /></>;
+  const boundary = project.boundaries.find((item) => item.id === selectedObjectId);
+  if (boundary) return <><FormatPainterControls /><BoundaryProperties boundary={boundary} idPrefix={idPrefix} /></>;
 
   return (
     <>
@@ -1271,6 +1347,25 @@ export function ObjectPanel({
                 visible={scatter.visible}
                 index={index + 1}
                 icon={Mountain}
+                accent="terrain"
+                onSelectComplete={onObjectSelected}
+              />
+            ))}
+            </ol>
+          </CollapsibleSection>
+          ) : null}
+          {project.boundaries.length ? (
+          <CollapsibleSection id={`${idPrefix}travel-boundaries`} label="Boundaries" count={project.boundaries.length}>
+            <ol>
+            {project.boundaries.map((boundary, index) => (
+              <ObjectRow
+                key={boundary.id}
+                id={boundary.id}
+                name={boundary.name}
+                detail={boundary.source || "boundary asset"}
+                visible={boundary.visible}
+                index={index + 1}
+                icon={MapPinned}
                 accent="terrain"
                 onSelectComplete={onObjectSelected}
               />

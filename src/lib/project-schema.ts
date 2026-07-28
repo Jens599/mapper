@@ -146,6 +146,19 @@ export const travelScatterSchema = z.object({
   visible: z.boolean().default(true),
 });
 
+export const boundaryAssetSchema = z.object({
+  id: idSchema,
+  name: z.string().trim().min(1).max(100),
+  source: z.string().trim().max(240).default(""),
+  attribution: z.string().trim().max(240).default("Boundary data"),
+  viewBox: z.string().trim().min(1).max(80),
+  path: z.string().trim().min(1).max(300_000),
+  fill: z.string().regex(/^#[0-9a-f]{6}$/i).default("#18221d"),
+  stroke: z.string().regex(/^#[0-9a-f]{6}$/i).default("#18221d"),
+  opacity: z.number().min(0).max(1).default(0.08),
+  visible: z.boolean().default(true),
+});
+
 const trailScatterRegionSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("canvas"),
@@ -258,6 +271,7 @@ const travelProjectSchema = z.object({
     iconAssets: z.array(iconAssetSchema).default([]),
     symbols: z.array(travelSymbolSchema).default([]),
     scatter: z.array(travelScatterSchema).default([]),
+    boundaries: z.array(boundaryAssetSchema).default([]),
   });
 
 const trailProjectSchema = z.object({
@@ -319,7 +333,7 @@ export const projectSchema = z
 
     const objects =
       project.kind === "travel"
-        ? [...project.stops, ...project.legs, ...project.symbols, ...project.scatter]
+        ? [...project.stops, ...project.legs, ...project.symbols, ...project.scatter, ...project.boundaries]
         : [...project.waypoints, ...project.routes, ...project.icons, ...project.scatter];
 
     for (const object of objects) {
@@ -447,6 +461,7 @@ export type IconAsset = z.infer<typeof iconAssetSchema>;
 export type TravelScatter = z.infer<typeof travelScatterSchema>;
 export type TrailScatter = z.infer<typeof trailScatterSchema>;
 export type PresentationSettings = z.infer<typeof presentationSchema>;
+export type BoundaryAsset = z.infer<typeof boundaryAssetSchema>;
 
 const legacyStopIcons: Record<string, string> = {
   city: "carbon-hotel",
