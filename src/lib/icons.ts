@@ -17,15 +17,25 @@ function iconNodeToSvg(name: string, node: IconNode): string {
 const lucideImports = dynamicIconImports as Record<string, () => Promise<{ __iconNode?: IconNode }>>;
 
 const svgCache = new Map<string, string>();
+const enableLucideDynamic = true;
+
+function sanitizeSvg(svg: string) {
+  return svg
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<foreignObject\b[\s\S]*?<\/foreignObject>/gi, "")
+    .replace(/\s+on[a-z]+=(?:("[^"]*")|('[^']*')|[^\s>]+)/gi, "")
+    .replace(/\s+(?:href|xlink:href)=(?:(['"])\s*(?:javascript|data):[\s\S]*?\1|[^\s>]*)/gi, "");
+}
 
 export async function loadLucideSvg(name: string): Promise<string | null> {
+  if (!enableLucideDynamic) return null;
   if (svgCache.has(name)) return svgCache.get(name)!;
   const importer = lucideImports[name];
   if (!importer) return null;
   try {
     const mod = await importer();
     if (!mod.__iconNode) return null;
-    const svg = iconNodeToSvg(name, mod.__iconNode);
+    const svg = sanitizeSvg(iconNodeToSvg(name, mod.__iconNode));
     svgCache.set(name, svg);
     return svg;
   } catch {
@@ -34,7 +44,8 @@ export async function loadLucideSvg(name: string): Promise<string | null> {
 }
 
 export function getCachedSvg(name: string): string | null {
-  return svgCache.get(name) ?? null;
+  const svg = svgCache.get(name);
+  return svg ? sanitizeSvg(svg) : null;
 }
 
 const iconAliases: Record<string, string> = {
@@ -94,7 +105,7 @@ export function getIconSvg(
   customIcons: Array<{ id: string; svg: string }>,
 ): string | null {
   const custom = customIcons.find((icon) => icon.id === iconId);
-  if (custom) return custom.svg;
+  if (custom) return sanitizeSvg(custom.svg);
   const resolved = iconAliases[iconId] ?? legacyPointIcons[iconId] ?? iconId;
   return getCachedSvg(resolved);
 }
@@ -105,7 +116,7 @@ export function getPointIconSvg(
 ): string | null {
   if (!iconId) return null;
   const custom = customIcons.find((icon) => icon.id === iconId);
-  if (custom) return custom.svg;
+  if (custom) return sanitizeSvg(custom.svg);
   const resolved = legacyPointIcons[iconId] ?? iconId;
   return getCachedSvg(resolved);
 }
@@ -114,7 +125,7 @@ export function sizeIconSvg(
   svg: string,
   dimensions: { width: number; height: number; x?: number; y?: number; color?: string },
 ) {
-  return svg.replace(/<svg\b([^>]*)>/i, (_match, attributes: string) => {
+  return sanitizeSvg(svg).replace(/<svg\b([^>]*)>/i, (_match, attributes: string) => {
     const selfClosing = attributes.trimEnd().endsWith("/");
     const cleaned = attributes
       .replace(/\/\s*$/, "")
@@ -129,6 +140,7 @@ export function sizeIconSvg(
 }
 
 export function getIconIds(): string[] {
+  if (!enableLucideDynamic) return [...Object.keys(iconAliases), ...Object.keys(legacyPointIcons)];
   const names = new Set<string>();
   for (const name of allLucideNames) names.add(name);
   for (const v of Object.values(iconAliases)) if (names.has(v)) names.add(v);
@@ -158,6 +170,7 @@ export const preloadIcons = (() => {
 let loadingPromise: Promise<void> | null = null;
 
 export function preloadIconsAsync(): Promise<void> {
+  if (!enableLucideDynamic) return Promise.resolve();
   if (!loadingPromise) {
     loadingPromise = Promise.all(
       preloadIcons.map((name) => loadLucideSvg(name))

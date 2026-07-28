@@ -5,6 +5,7 @@ import { immer } from "zustand/middleware/immer";
 
 import { sampleProject } from "@/data/sample-project";
 import { sampleTrailProject } from "@/data/sample-trail-project";
+import { mapperDebug } from "@/lib/debug";
 import type {
   IconAsset,
   BoundaryAsset,
@@ -80,29 +81,64 @@ type FormatClipboard =
       appearance: TravelProject["scatter"][number]["appearance"];
     };
 
-function cloneFormat<T>(value: T): T {
-  return structuredClone(value);
+const defaultStopLabelStyle: TravelStop["labelStyle"] = {
+  fontSize: 1,
+  color: "#18221d",
+  bold: true,
+};
+
+const defaultStopPointStyle: TravelStop["pointStyle"] = {
+  fill: "#e9efeb",
+  showFill: true,
+  stroke: "#18221d",
+  showStroke: true,
+  strokeWidth: 2.5,
+};
+
+const defaultTravelLegStyle: LegStyle = {
+  line: "solid",
+  curvature: 0,
+  winding: 0,
+  noiseSeed: 42,
+  noiseAmplitude: 0,
+  noiseScale: 2,
+  noiseOctaves: 3,
+  noiseModulation: 0,
+  color: "#202b25",
+};
+
+function ensureStopStyleDefaults(stop: TravelStop) {
+  stop.labelOffset ??= [0, 0];
+  stop.labelStyle = { ...defaultStopLabelStyle, ...stop.labelStyle };
+  stop.pointStyle = { ...defaultStopPointStyle, ...stop.pointStyle };
+}
+
+function ensureLegStyleDefaults(leg: TravelProject["legs"][number]) {
+  leg.style = { ...defaultTravelLegStyle, ...leg.style };
 }
 
 function readFormat(project: MapperProject, id: string | null): FormatClipboard | null {
   if (project.kind !== "travel" || !id) return null;
   const stop = project.stops.find((item) => item.id === id);
   if (stop) {
+    const labelStyle = { ...defaultStopLabelStyle, ...stop.labelStyle };
+    const pointStyle = { ...defaultStopPointStyle, ...stop.pointStyle };
     return {
       kind: "travel-stop",
       icon: stop.icon,
       labelAnchor: stop.labelAnchor,
-      labelStyle: cloneFormat(stop.labelStyle),
-      pointStyle: cloneFormat(stop.pointStyle),
+      labelStyle: { ...labelStyle },
+      pointStyle: { ...pointStyle },
     };
   }
   const leg = project.legs.find((item) => item.id === id);
   if (leg) {
+    const style = { ...defaultTravelLegStyle, ...leg.style };
     return {
       kind: "travel-leg",
       showDayLabel: leg.showDayLabel,
       iconId: leg.iconId,
-      style: cloneFormat(leg.style),
+      style: { ...style },
     };
   }
   const symbol = project.symbols.find((item) => item.id === id);
@@ -116,10 +152,15 @@ function readFormat(project: MapperProject, id: string | null): FormatClipboard 
   }
   const scatter = project.scatter.find((item) => item.id === id);
   if (scatter) {
+    const scale = scatter.appearance?.scale ?? [1, 1];
+    const rotation = scatter.appearance?.rotation ?? [0, 0];
     return {
       kind: "travel-scatter",
       iconId: scatter.iconId,
-      appearance: cloneFormat(scatter.appearance),
+      appearance: {
+        scale: [scale[0], scale[1]],
+        rotation: [rotation[0], rotation[1]],
+      },
     };
   }
   return null;
@@ -133,8 +174,8 @@ function applyFormat(state: { project: MapperProject; formatClipboard: FormatCli
     if (!stop) return false;
     stop.icon = format.icon;
     stop.labelAnchor = format.labelAnchor;
-    stop.labelStyle = cloneFormat(format.labelStyle);
-    stop.pointStyle = cloneFormat(format.pointStyle);
+    stop.labelStyle = { ...format.labelStyle };
+    stop.pointStyle = { ...format.pointStyle };
     return true;
   }
   if (format.kind === "travel-leg") {
@@ -142,7 +183,7 @@ function applyFormat(state: { project: MapperProject; formatClipboard: FormatCli
     if (!leg) return false;
     leg.showDayLabel = format.showDayLabel;
     leg.iconId = format.iconId;
-    leg.style = cloneFormat(format.style);
+    leg.style = { ...format.style };
     return true;
   }
   if (format.kind === "travel-symbol") {
@@ -156,7 +197,10 @@ function applyFormat(state: { project: MapperProject; formatClipboard: FormatCli
   const scatter = state.project.scatter.find((item) => item.id === id);
   if (!scatter) return false;
   scatter.iconId = format.iconId;
-  scatter.appearance = cloneFormat(format.appearance);
+  scatter.appearance = {
+    scale: [format.appearance.scale[0], format.appearance.scale[1]],
+    rotation: [format.appearance.rotation[0], format.appearance.rotation[1]],
+  };
   return true;
 }
 
@@ -266,6 +310,28 @@ export const useEditorStore = create<EditorState>()(
      },
       selectObject: (id) => {
         set((state) => {
+          if (state.project.kind === "travel") {
+            mapperDebug("selection", "selectObject", {
+              id,
+              previous: state.selectedObjectId,
+              kind: state.project.kind,
+              matches: {
+                stop: state.project.stops.some((item) => item.id === id),
+                leg: state.project.legs.some((item) => item.id === id),
+                symbol: state.project.symbols.some((item) => item.id === id),
+                scatter: state.project.scatter.some((item) => item.id === id),
+                boundary: (state.project.boundaries ?? []).some((item) => item.id === id),
+              },
+              formatPainterActive: state.formatPainterActive,
+            });
+          } else {
+            mapperDebug("selection", "selectObject", {
+              id,
+              previous: state.selectedObjectId,
+              kind: state.project.kind,
+              formatPainterActive: state.formatPainterActive,
+            });
+          }
           if (state.formatPainterActive && applyFormat(state, id)) {
             state.formatPainterActive = false;
           }
@@ -528,11 +594,11 @@ export const useEditorStore = create<EditorState>()(
         if ("elevation" in update) stop.elevation = update.elevation;
         if (update.labelAnchor) stop.labelAnchor = update.labelAnchor;
         if (update.labelStyle) {
-          if (!stop.labelStyle) stop.labelStyle = {} as typeof stop.labelStyle;
+          ensureStopStyleDefaults(stop);
           Object.assign(stop.labelStyle, update.labelStyle);
         }
         if (update.pointStyle) {
-          if (!stop.pointStyle) stop.pointStyle = {} as typeof stop.pointStyle;
+          ensureStopStyleDefaults(stop);
           Object.assign(stop.pointStyle, update.pointStyle);
         }
       });
@@ -569,7 +635,10 @@ export const useEditorStore = create<EditorState>()(
       set((state) => {
         if (state.project.kind !== "travel") return;
         const leg = state.project.legs.find((item) => item.id === legId);
-        if (leg) Object.assign(leg.style, { [key]: value });
+        if (leg) {
+          ensureLegStyleDefaults(leg);
+          Object.assign(leg.style, { [key]: value });
+        }
       });
     },
     applyLegShapeToAll: (legId) => {
@@ -577,7 +646,9 @@ export const useEditorStore = create<EditorState>()(
         if (state.project.kind !== "travel") return;
         const source = state.project.legs.find((leg) => leg.id === legId);
         if (!source) return;
+        ensureLegStyleDefaults(source);
         for (const leg of state.project.legs) {
+          ensureLegStyleDefaults(leg);
           leg.style.curvature = source.style.curvature;
           leg.style.winding = source.style.winding;
           leg.style.noiseSeed = source.style.noiseSeed;
@@ -794,7 +865,10 @@ export const useEditorStore = create<EditorState>()(
       set((state) => {
         if (state.project.kind !== "travel") return;
         const stop = state.project.stops.find((item) => item.id === id);
-        if (stop) stop.labelOffset[axis] = value;
+        if (stop) {
+          ensureStopStyleDefaults(stop);
+          stop.labelOffset[axis] = value;
+        }
       });
     },
     moveTravelStop: (id, coordinates) => {
@@ -855,7 +929,10 @@ export const useEditorStore = create<EditorState>()(
       set((state) => {
         if (state.project.kind !== "travel") return;
         const leg = state.project.legs.find((item) => item.id === legId);
-        if (leg) leg.style.curvature = Math.min(10, Math.max(-10, curvature));
+        if (leg) {
+          ensureLegStyleDefaults(leg);
+          leg.style.curvature = Math.min(10, Math.max(-10, curvature));
+        }
       });
     },
     updateLegIcon: (legId, iconId) => {
@@ -872,6 +949,7 @@ export const useEditorStore = create<EditorState>()(
         if (state.project.kind !== "travel") return;
         const stop = state.project.stops.find((item) => item.id === id);
         if (stop) {
+          ensureStopStyleDefaults(stop);
           if (key === "fontSize") stop.labelStyle.fontSize = value as number;
           else if (key === "color") stop.labelStyle.color = value as string;
           else if (key === "bold") stop.labelStyle.bold = value as boolean;

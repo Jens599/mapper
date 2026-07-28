@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { nepalBoundary } from "@/data/nepal-boundary";
 import { getIconSvg, getPointIconSvg, sizeIconSvg } from "@/lib/builtin-icons";
 import { foregroundFromBackground, mutedFromBackground } from "@/lib/color-utils";
+import { mapperDebug } from "@/lib/debug";
 import type { Coordinate, TravelProject, TravelScatter } from "@/lib/project-schema";
 import { generateTravelScatter, geographicToSymbolic } from "@/lib/scatter";
 import { getSymbolicStopPositions } from "@/lib/travel-geometry";
@@ -684,6 +685,15 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
 
         {project.symbols.filter((symbol) => symbol.visible).map((symbol) => {
           const svg = getIconSvg(symbol.iconId, project.iconAssets);
+          if (selectedObjectId === symbol.id) {
+            mapperDebug("symbolic-canvas", "selected symbol svg lookup", {
+              id: symbol.id,
+              iconId: symbol.iconId,
+              hasSvg: Boolean(svg),
+              customIconCount: project.iconAssets.length,
+              iconSource: "builtin-icons",
+            });
+          }
           if (!svg) return null;
           const base = symbol.diagramPosition ?? geographicToSymbolic(project, symbol.coordinates);
             const sizedSvg = sizeIconSvg(svg, { width: 32, height: 32, color: canvasFg });

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { mapperDebug } from "@/lib/debug";
 import { getCachedSvg, getIconIds, getIconSvg, loadLucideSvg } from "@/lib/icons";
 import type { IconAsset } from "@/lib/project-schema";
 import { cn } from "@/lib/utils";
@@ -66,12 +66,14 @@ function IconPreview({ svg, className }: { svg: string | null; className?: strin
   if (!svg) {
     return <span className={cn("grid place-items-center text-muted-foreground", className)}>...</span>;
   }
+  const source = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   return (
     <span
-      className={cn("text-foreground [&_svg]:size-full", className)}
+      className={cn("grid place-items-center text-foreground", className)}
       aria-hidden="true"
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
+    >
+      <img src={source} alt="" className="size-full object-contain" draggable={false} />
+    </span>
   );
 }
 
@@ -88,6 +90,7 @@ export function IconPicker({
   const [loadedTick, setLoadedTick] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const requestedIdsRef = useRef(new Set<string>());
   const selectedId = value || null;
 
   useEffect(() => {
@@ -137,10 +140,26 @@ export function IconPicker({
         if (option.pack === "Lucide" && !option.svg) ids.add(option.id);
       }
     }
+    for (const id of ids) {
+      if (requestedIdsRef.current.has(id)) ids.delete(id);
+      else requestedIdsRef.current.add(id);
+    }
     if (!ids.size) return;
+    mapperDebug("icon-picker", "load requested", {
+      label,
+      selectedId,
+      open,
+      ids: [...ids],
+    });
     let cancelled = false;
-    Promise.all([...ids].map((id) => loadLucideSvg(id))).then(() => {
-      if (!cancelled) setLoadedTick((tick) => tick + 1);
+    Promise.all([...ids].map((id) => loadLucideSvg(id))).then((loaded) => {
+      mapperDebug("icon-picker", "load completed", {
+        label,
+        cancelled,
+        ids: [...ids],
+        loadedCount: loaded.filter(Boolean).length,
+      });
+      if (!cancelled && loaded.some(Boolean)) setLoadedTick((tick) => tick + 1);
     });
     return () => {
       cancelled = true;
@@ -157,9 +176,15 @@ export function IconPicker({
   }, [open]);
 
   async function chooseIcon(option: IconOption) {
+    mapperDebug("icon-picker", "choose icon", {
+      label,
+      id: option.id,
+      pack: option.pack,
+      hasSvg: Boolean(option.svg),
+    });
     if (option.pack === "Lucide" && !getCachedSvg(option.id)) {
       await loadLucideSvg(option.id);
-      setLoadedTick((tick) => tick + 1);
+      if (getCachedSvg(option.id)) setLoadedTick((tick) => tick + 1);
     }
     onValueChange(option.id);
     setOpen(false);
@@ -189,7 +214,7 @@ export function IconPicker({
         <ChevronDown className="size-4 shrink-0 opacity-60" aria-hidden="true" />
       </Button>
       {open ? (
-        <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border bg-popover shadow-xl">
+        <div className="absolute left-1/2 top-full z-50 mt-2 w-[calc(100%+2rem)] max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-hidden rounded-xl border bg-popover shadow-xl">
           <div className="border-b p-2">
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -202,7 +227,7 @@ export function IconPicker({
               />
             </div>
           </div>
-          <ScrollArea className="max-h-80">
+          <div className="max-h-80 overflow-y-auto overscroll-contain">
             <div className="grid gap-1 p-1.5">
               {allowNone ? (
                 <button
@@ -243,7 +268,7 @@ export function IconPicker({
                 <p className="px-3 py-8 text-center text-sm text-muted-foreground">No matching icons.</p>
               ) : null}
             </div>
-          </ScrollArea>
+          </div>
         </div>
       ) : null}
     </div>

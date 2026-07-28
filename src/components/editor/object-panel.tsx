@@ -60,6 +60,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { boundaryFromGeoJson, fetchOsmBoundary } from "@/lib/boundary-utils";
+import { mapperDebug } from "@/lib/debug";
 import type { BoundaryAsset, TravelLeg, TravelScatter, TravelStop } from "@/lib/project-schema";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/store/editor-store";
@@ -85,6 +86,32 @@ const symbolicPresentationOptions = [
   ["Fill canvas", "fillCanvas"],
   ["Larger day text", "largerDayText"],
 ] as const;
+
+const defaultLabelStyle: TravelStop["labelStyle"] = {
+  fontSize: 1,
+  color: "#18221d",
+  bold: true,
+};
+
+const defaultPointStyle: TravelStop["pointStyle"] = {
+  fill: "#e9efeb",
+  showFill: true,
+  stroke: "#18221d",
+  showStroke: true,
+  strokeWidth: 2.5,
+};
+
+const defaultLegStyle: TravelLeg["style"] = {
+  line: "solid",
+  curvature: 0,
+  winding: 0,
+  noiseSeed: 42,
+  noiseAmplitude: 0,
+  noiseScale: 2,
+  noiseOctaves: 3,
+  noiseModulation: 0,
+  color: "#0f766e",
+};
 
 function CollapsibleSection({
   id,
@@ -327,6 +354,9 @@ function StopProperties({
   const updatePointIcon = useEditorStore((state) => state.updatePointIcon);
   const updateTravelStop = useEditorStore((state) => state.updateTravelStop);
   const project = useEditorStore((state) => state.project);
+  const labelOffset = stop.labelOffset ?? [0, 0];
+  const labelStyle = { ...defaultLabelStyle, ...stop.labelStyle };
+  const pointStyle = { ...defaultPointStyle, ...stop.pointStyle };
   return (
     <section
       aria-labelledby={`${idPrefix}stop-properties`}
@@ -379,39 +409,39 @@ function StopProperties({
       </p>
       <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
         Background fill
-        <Switch checked={stop.pointStyle.showFill} onCheckedChange={(checked) => updateTravelStop(stop.id, { pointStyle: { ...stop.pointStyle, showFill: checked } })} />
+        <Switch checked={pointStyle.showFill} onCheckedChange={(checked) => updateTravelStop(stop.id, { pointStyle: { ...pointStyle, showFill: checked } })} />
       </label>
-      {stop.pointStyle.showFill ? (
+      {pointStyle.showFill ? (
       <div className="grid gap-1.5">
         <Label htmlFor={`${idPrefix}point-fill`}>Fill color</Label>
         <div className="flex items-center gap-2">
           <input
             id={`${idPrefix}point-fill`}
             type="color"
-            value={stop.pointStyle.fill}
-            onChange={(event) => updateTravelStop(stop.id, { pointStyle: { ...stop.pointStyle, fill: event.currentTarget.value } })}
+            value={pointStyle.fill}
+            onChange={(event) => updateTravelStop(stop.id, { pointStyle: { ...pointStyle, fill: event.currentTarget.value } })}
             className="size-8 cursor-pointer rounded border bg-transparent p-0.5"
           />
-          <span className="font-mono text-xs text-muted-foreground">{stop.pointStyle.fill}</span>
+          <span className="font-mono text-xs text-muted-foreground">{pointStyle.fill}</span>
         </div>
       </div>
       ) : null}
       <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
         Border stroke
-        <Switch checked={stop.pointStyle.showStroke} onCheckedChange={(checked) => updateTravelStop(stop.id, { pointStyle: { ...stop.pointStyle, showStroke: checked } })} />
+        <Switch checked={pointStyle.showStroke} onCheckedChange={(checked) => updateTravelStop(stop.id, { pointStyle: { ...pointStyle, showStroke: checked } })} />
       </label>
-      {stop.pointStyle.showStroke ? (
+      {pointStyle.showStroke ? (
       <div className="grid gap-1.5">
         <Label htmlFor={`${idPrefix}point-stroke`}>Stroke color</Label>
         <div className="flex items-center gap-2">
           <input
             id={`${idPrefix}point-stroke`}
             type="color"
-            value={stop.pointStyle.stroke}
-            onChange={(event) => updateTravelStop(stop.id, { pointStyle: { ...stop.pointStyle, stroke: event.currentTarget.value } })}
+            value={pointStyle.stroke}
+            onChange={(event) => updateTravelStop(stop.id, { pointStyle: { ...pointStyle, stroke: event.currentTarget.value } })}
             className="size-8 cursor-pointer rounded border bg-transparent p-0.5"
           />
-          <span className="font-mono text-xs text-muted-foreground">{stop.pointStyle.stroke}</span>
+          <span className="font-mono text-xs text-muted-foreground">{pointStyle.stroke}</span>
         </div>
       </div>
       ) : null}
@@ -435,7 +465,7 @@ function StopProperties({
       <NoiseControl
         id={`${idPrefix}label-offset-x`}
         label="Label horizontal"
-        value={stop.labelOffset[0]}
+        value={labelOffset[0]}
         min={-160}
         max={160}
         step={1}
@@ -445,7 +475,7 @@ function StopProperties({
       <NoiseControl
         id={`${idPrefix}label-offset-y`}
         label="Label vertical"
-        value={stop.labelOffset[1]}
+        value={labelOffset[1]}
         min={-120}
         max={120}
         step={1}
@@ -458,7 +488,7 @@ function StopProperties({
       <NoiseControl
         id={`${idPrefix}label-font-size`}
         label="Font size"
-        value={stop.labelStyle.fontSize}
+        value={labelStyle.fontSize}
         min={0.5}
         max={3}
         step={0.1}
@@ -470,16 +500,16 @@ function StopProperties({
           <input
             id={`${idPrefix}label-color`}
             type="color"
-            value={stop.labelStyle.color}
+            value={labelStyle.color}
             onChange={(event) => updateStopLabelStyle(stop.id, "color", event.currentTarget.value)}
             className="size-8 cursor-pointer rounded border bg-transparent p-0.5"
           />
-          <span className="font-mono text-xs text-muted-foreground">{stop.labelStyle.color}</span>
+          <span className="font-mono text-xs text-muted-foreground">{labelStyle.color}</span>
         </div>
       </div>
       <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
         Bold text
-        <Switch checked={stop.labelStyle.bold} onCheckedChange={(checked) => updateStopLabelStyle(stop.id, "bold", checked)} />
+        <Switch checked={labelStyle.bold} onCheckedChange={(checked) => updateStopLabelStyle(stop.id, "bold", checked)} />
       </label>
     </section>
   );
@@ -500,6 +530,7 @@ function LegProperties({
   const updateLegIcon = useEditorStore((state) => state.updateLegIcon);
   const project = useEditorStore((state) => state.project);
   const stopNames = new Map(stops.map((stop) => [stop.id, stop.name]));
+  const style = { ...defaultLegStyle, ...leg.style };
   return (
     <section
       aria-labelledby={`${idPrefix}leg-properties`}
@@ -534,7 +565,7 @@ function LegProperties({
       <NoiseControl
         id={`${idPrefix}curvature`}
         label="Route curve"
-        value={leg.style.curvature}
+        value={style.curvature}
         min={-10}
         max={10}
         step={0.02}
@@ -542,7 +573,7 @@ function LegProperties({
       />
       <div className="grid gap-1.5">
         <Label htmlFor={`${idPrefix}line-style`}>Line style</Label>
-        <Select value={leg.style.line} onValueChange={(value) => value && updateLegStyle(leg.id, "line", value as TravelLeg["style"]["line"])}>
+        <Select value={style.line} onValueChange={(value) => value && updateLegStyle(leg.id, "line", value as TravelLeg["style"]["line"])}>
           <SelectTrigger id={`${idPrefix}line-style`} className="w-full"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="solid">Solid</SelectItem>
@@ -551,16 +582,16 @@ function LegProperties({
           </SelectContent>
         </Select>
       </div>
-      <NoiseControl id={`${idPrefix}noise-amplitude`} label="Perlin amplitude" value={leg.style.noiseAmplitude} min={-10} max={10} step={0.01} onChange={(value) => updateLegStyle(leg.id, "noiseAmplitude", value)} />
-      <NoiseControl id={`${idPrefix}noise-seed`} label="Noise seed" value={leg.style.noiseSeed} min={0} max={2_147_483_647} step={1} onChange={(value) => updateLegStyle(leg.id, "noiseSeed", Math.round(value))} />
-      <NoiseControl id={`${idPrefix}noise-scale`} label="Noise scale" value={leg.style.noiseScale} min={0.25} max={8} step={0.25} onChange={(value) => updateLegStyle(leg.id, "noiseScale", value)} />
-      <NoiseControl id={`${idPrefix}noise-octaves`} label="Noise octaves" value={leg.style.noiseOctaves} min={1} max={6} step={1} onChange={(value) => updateLegStyle(leg.id, "noiseOctaves", Math.round(value))} />
-      <NoiseControl id={`${idPrefix}noise-modulation`} label="Noise modulation" value={leg.style.noiseModulation} min={-10} max={10} step={0.01} onChange={(value) => updateLegStyle(leg.id, "noiseModulation", value)} />
+      <NoiseControl id={`${idPrefix}noise-amplitude`} label="Perlin amplitude" value={style.noiseAmplitude} min={-10} max={10} step={0.01} onChange={(value) => updateLegStyle(leg.id, "noiseAmplitude", value)} />
+      <NoiseControl id={`${idPrefix}noise-seed`} label="Noise seed" value={style.noiseSeed} min={0} max={2_147_483_647} step={1} onChange={(value) => updateLegStyle(leg.id, "noiseSeed", Math.round(value))} />
+      <NoiseControl id={`${idPrefix}noise-scale`} label="Noise scale" value={style.noiseScale} min={0.25} max={8} step={0.25} onChange={(value) => updateLegStyle(leg.id, "noiseScale", value)} />
+      <NoiseControl id={`${idPrefix}noise-octaves`} label="Noise octaves" value={style.noiseOctaves} min={1} max={6} step={1} onChange={(value) => updateLegStyle(leg.id, "noiseOctaves", Math.round(value))} />
+      <NoiseControl id={`${idPrefix}noise-modulation`} label="Noise modulation" value={style.noiseModulation} min={-10} max={10} step={0.01} onChange={(value) => updateLegStyle(leg.id, "noiseModulation", value)} />
       <Button variant="outline" size="sm" onClick={() => applyLegShapeToAll(leg.id)}>Apply route shape to all legs</Button>
       <NoiseControl
         id={`${idPrefix}winding`}
         label="Hand-drawn winding"
-        value={leg.style.winding}
+        value={style.winding}
         min={-10}
         max={10}
         step={0.02}
@@ -573,7 +604,7 @@ function LegProperties({
         </div>
         <div>
           <dt className="text-muted-foreground">Line</dt>
-          <dd className="font-mono font-medium capitalize">{leg.style.line}</dd>
+          <dd className="font-mono font-medium capitalize">{style.line}</dd>
         </div>
       </dl>
     </section>
@@ -856,6 +887,14 @@ function SymbolProperties({
   const updateSymbolTransform = useEditorStore(
     (state) => state.updateSymbolTransform,
   );
+  useEffect(() => {
+    mapperDebug("object-panel", "symbol properties mounted", {
+      id: symbol.id,
+      iconId: symbol.iconId,
+      scale: symbol.scale,
+      rotation: symbol.rotation,
+    });
+  }, [symbol.iconId, symbol.id, symbol.rotation, symbol.scale]);
   return (
     <section aria-labelledby={`${idPrefix}symbol-properties`} className="grid gap-5 p-4">
       <div>
