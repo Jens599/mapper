@@ -9,7 +9,6 @@ import { tags } from "@lezer/highlight";
 import { Columns2, FileCode2, Maximize2, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { usePanelRef } from "react-resizable-panels";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,14 +24,10 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable";
 import { deserializeProject, serializeProject } from "@/lib/project-io";
-import { useEditorStore } from "@/store/editor-store";
 import { getIconIds } from "@/lib/icons";
+import { cn } from "@/lib/utils";
+import { useEditorStore } from "@/store/editor-store";
 
 const CodeMirror = dynamic(() => import("@uiw/react-codemirror"), {
   ssr: false,
@@ -112,7 +107,6 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
   const [pending, startTransition] = useTransition();
   const [desktop, setDesktop] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
-  const editorPanelRef = usePanelRef();
   const userEdited = useRef(false);
 
   useEffect(() => {
@@ -140,12 +134,10 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
 
   function showHalfScreen() {
     setFullscreen(false);
-    requestAnimationFrame(() => editorPanelRef.current?.resize(50));
   }
 
   function showFullScreen() {
     setFullscreen(true);
-    requestAnimationFrame(() => editorPanelRef.current?.resize(100));
   }
 
   function applySource() {
@@ -277,19 +269,12 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
         >
           <DialogTitle className="sr-only">Project builder</DialogTitle>
           <DialogDescription className="sr-only">Edit and validate the active project YAML.</DialogDescription>
-          <ResizablePanelGroup orientation="horizontal" className="size-full">
-            <ResizablePanel defaultSize={fullscreen ? 0 : 50} minSize={0} className="bg-black/40" />
-            <ResizableHandle withHandle className="bg-[#454545]" onDoubleClick={showHalfScreen} />
-            <ResizablePanel
-              panelRef={editorPanelRef}
-              defaultSize={fullscreen ? 100 : 50}
-              minSize={30}
-              maxSize={fullscreen ? 100 : 80}
-              className="shadow-[-10px_0_30px_rgba(0,0,0,0.35)]"
-            >
+          <div className="flex size-full">
+            {fullscreen ? null : <div className="min-w-0 flex-1 bg-black/35" />}
+            <section className={cn("h-full min-w-0 shadow-[-10px_0_30px_rgba(0,0,0,0.35)]", fullscreen ? "w-full" : "w-[min(50vw,900px)] min-w-[44rem]")}>
               {workspace}
-            </ResizablePanel>
-          </ResizablePanelGroup>
+            </section>
+          </div>
         </DialogContent>
       </Dialog>
       <Drawer open={open && !desktop} onOpenChange={setOpen} direction="bottom">

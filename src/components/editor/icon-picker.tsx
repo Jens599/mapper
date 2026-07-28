@@ -69,11 +69,10 @@ function IconPreview({ svg, className }: { svg: string | null; className?: strin
   const source = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   return (
     <span
-      className={cn("grid place-items-center text-foreground", className)}
+      className={cn("block bg-current text-foreground", className)}
       aria-hidden="true"
-    >
-      <img src={source} alt="" className="size-full object-contain" draggable={false} />
-    </span>
+      style={{ WebkitMask: `url("${source}") center / contain no-repeat`, mask: `url("${source}") center / contain no-repeat` }}
+    />
   );
 }
 
@@ -214,8 +213,8 @@ export function IconPicker({
         <ChevronDown className="size-4 shrink-0 opacity-60" aria-hidden="true" />
       </Button>
       {open ? (
-        <div className="absolute left-1/2 top-full z-50 mt-2 w-[calc(100%+2rem)] max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-hidden rounded-xl border bg-popover shadow-xl">
-          <div className="border-b p-2">
+        <div className="absolute left-1/2 top-full z-50 mt-2 w-[calc(100%+2rem)] max-w-[calc(100vw-1rem)] -translate-x-1/2 overflow-hidden rounded-xl border border-sidebar-border bg-sidebar shadow-xl">
+          <div className="border-b border-sidebar-border p-2">
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <Input
@@ -248,12 +247,14 @@ export function IconPicker({
                   key={option.id}
                   type="button"
                   className={cn(
-                    "focus-ring flex min-h-11 items-center gap-2 rounded-lg px-2 text-left hover:bg-muted",
-                    selectedId === option.id && "bg-accent",
+                    "focus-ring flex min-h-11 items-center gap-2 rounded-lg px-2 text-left hover:bg-sidebar-accent",
+                    selectedId === option.id && "bg-sidebar-accent text-sidebar-accent-foreground",
                   )}
                   onClick={() => void chooseIcon(option)}
                 >
-                  <IconPreview svg={hydrated ? option.svg : null} className="size-8 shrink-0 rounded-md border bg-card p-1.5" />
+                  <span className="grid size-8 shrink-0 place-items-center rounded-md border border-sidebar-border bg-sidebar-accent/30 p-1.5 text-sidebar-foreground">
+                    <IconPreview svg={hydrated ? option.svg : null} className="size-5" />
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold">{option.name}</span>
                     <span className="block truncate font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
