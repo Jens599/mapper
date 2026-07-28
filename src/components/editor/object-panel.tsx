@@ -125,10 +125,10 @@ function CollapsibleSection({
   children: React.ReactNode;
 }) {
   const storageKey = `mapper-section-${id}`;
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    setOpen(window.localStorage.getItem(storageKey) !== "closed");
+    setOpen(window.localStorage.getItem(storageKey) === "open");
   }, [storageKey]);
 
   return (

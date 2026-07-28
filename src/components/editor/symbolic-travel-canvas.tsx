@@ -597,19 +597,33 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           const position = positions.get(stop.id);
           if (!position) return null;
           const anchor = stop.labelAnchor === "auto" ? (index % 2 === 0 ? "top" : "bottom") : stop.labelAnchor;
-          const labelLayout = anchor === "top"
-            ? { x: 0, y: -24, rectX: -72, rectY: -34, textX: 0, nameY: -19, dayY: -7 }
-            : anchor === "bottom"
-              ? { x: 0, y: 25, rectX: -72, rectY: 0, textX: 0, nameY: 14, dayY: 27 }
-              : anchor === "right"
-                ? { x: 24, y: -17, rectX: 0, rectY: 0, textX: 72, nameY: 14, dayY: 27 }
-                : { x: -24, y: -17, rectX: -144, rectY: 0, textX: -72, nameY: 14, dayY: 27 };
           const iconSvg = getPointIconSvg(stop.icon, project.iconAssets);
           const sizedIcon = iconSvg ? sizeIconSvg(iconSvg, { width: 20, height: 20 }) : null;
           const endpointRole = index === 0 ? "START" : index === project.stops.length - 1 ? "FINISH" : null;
           const displayedDayLabel = sequentialDayLabels ? `Day ${index + 1}` : stop.dayLabel;
           const markerRadius = emphasizeEndpoints && endpointRole ? 17 : 13;
-          const dayFontSize = (largerDayText ? 10.5 : 9) * textScale * stop.labelStyle.fontSize;
+          const labelStyle = stop.labelStyle ?? { fontSize: 1, color: "#18221d", bold: true };
+          const nameFontSize = 12 * textScale * labelStyle.fontSize;
+          const dayFontSize = (largerDayText ? 10.5 : 9) * textScale * labelStyle.fontSize;
+          const labelWidth = Math.max(
+            144,
+            stop.name.length * nameFontSize * 0.62 + 28,
+            displayedDayLabel.length * dayFontSize * 0.68 + 28,
+          );
+          const labelHeight = Math.max(34, nameFontSize + dayFontSize + 14);
+          const labelGap = markerRadius + 10;
+          const nameBaseline = nameFontSize + 5;
+          const dayBaseline = nameFontSize + dayFontSize + 8;
+          const labelLayout = anchor === "top"
+            ? { x: 0, y: -labelGap, rectX: -labelWidth / 2, rectY: -labelHeight, textX: 0, nameY: -labelHeight + nameBaseline, dayY: -labelHeight + dayBaseline }
+            : anchor === "bottom"
+              ? { x: 0, y: labelGap, rectX: -labelWidth / 2, rectY: 0, textX: 0, nameY: nameBaseline, dayY: dayBaseline }
+              : anchor === "right"
+                ? { x: labelGap, y: -labelHeight / 2, rectX: 0, rectY: 0, textX: labelWidth / 2, nameY: nameBaseline, dayY: dayBaseline }
+                : { x: -labelGap, y: -labelHeight / 2, rectX: -labelWidth, rectY: 0, textX: -labelWidth / 2, nameY: nameBaseline, dayY: dayBaseline };
+          const endpointFontSize = 7.5 * textScale;
+          const endpointBadgeWidth = endpointRole ? Math.max(46, endpointRole.length * endpointFontSize * 0.75 + 16) : 46;
+          const endpointBadgeHeight = Math.max(14, endpointFontSize + 6);
           return (
             <g
               key={stop.id}
@@ -652,17 +666,17 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
                 <g transform="translate(-10 -10)" fill="var(--canvas-fg, var(--trail))" color="var(--canvas-fg, var(--trail))" dangerouslySetInnerHTML={{ __html: sizedIcon }} />
               ) : null}
               <g transform={`translate(${labelLayout.x + stop.labelOffset[0]} ${labelLayout.y + stop.labelOffset[1]})`}>
-                <rect x={labelLayout.rectX} y={labelLayout.rectY} width="144" height="34" rx="4" fill="var(--canvas-muted, var(--muted))" stroke="var(--canvas-fg, var(--muted-foreground))" />
-                <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.nameY} fill={stop.labelStyle.color} fontSize={12 * textScale * stop.labelStyle.fontSize} fontWeight={stop.labelStyle.bold ? "700" : "500"}>
+                <rect x={labelLayout.rectX} y={labelLayout.rectY} width={labelWidth} height={labelHeight} rx="4" fill="var(--canvas-muted, var(--muted))" stroke="var(--canvas-fg, var(--muted-foreground))" />
+                <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.nameY} fill={labelStyle.color} fontSize={nameFontSize} fontWeight={labelStyle.bold ? "700" : "500"}>
                   {stop.name}
                 </text>
                 <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.dayY} fill="var(--canvas-fg, var(--trail))" fontSize={dayFontSize} fontFamily="monospace" fontWeight="800">
                   {displayedDayLabel}
                 </text>
                 {emphasizeEndpoints && endpointRole ? (
-                  <g transform={`translate(${labelLayout.textX} ${labelLayout.rectY - 8})`}>
-                    <rect x="-23" y="-10" width="46" height="14" rx="7" fill={endpointRole === "START" ? "#0b73a8" : "#c2410c"} />
-                    <text y="0.5" textAnchor="middle" fill="#ffffff" fontSize={7.5 * textScale} fontFamily="monospace" fontWeight="800">{endpointRole}</text>
+                  <g transform={`translate(${labelLayout.textX} ${labelLayout.rectY - endpointBadgeHeight + 2})`}>
+                    <rect x={-endpointBadgeWidth / 2} y="0" width={endpointBadgeWidth} height={endpointBadgeHeight} rx={endpointBadgeHeight / 2} fill={endpointRole === "START" ? "#0b73a8" : "#c2410c"} />
+                    <text y={endpointFontSize + 3} textAnchor="middle" fill="#ffffff" fontSize={endpointFontSize} fontFamily="monospace" fontWeight="800">{endpointRole}</text>
                   </g>
                 ) : null}
               </g>
