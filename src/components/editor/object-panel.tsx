@@ -3,20 +3,27 @@
 import {
   CarFront,
   ChevronDown,
+  FileCode2,
   Footprints,
   MapPinned,
   MapPin,
   Mountain,
+  Paintbrush,
   PanelLeftClose,
   Pencil,
   Plane,
   Plus,
+  Search,
   Ship,
   TrainFront,
+  Trash2,
+  Upload,
+  X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { NoiseControl } from "@/components/editor/noise-control";
+import { IconPicker } from "@/components/editor/icon-picker";
 import { TrailObjectPanel } from "@/components/editor/trail-object-panel";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,8 +59,9 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { builtinIcons } from "@/lib/builtin-icons";
-import type { TravelLeg, TravelScatter, TravelStop } from "@/lib/project-schema";
+import { boundaryFromGeoJson, fetchOsmBoundary } from "@/lib/boundary-utils";
+import { mapperDebug } from "@/lib/debug";
+import type { BoundaryAsset, TravelLeg, TravelScatter, TravelStop } from "@/lib/project-schema";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/store/editor-store";
 
@@ -64,6 +72,46 @@ const modeIcons = {
   train: TrainFront,
   boat: Ship,
 } as const;
+
+const symbolicPresentationOptions = [
+  ["Line background", "showLineHalo"],
+  ["Legend", "showLegend"],
+  ["Title/subtitle", "showTitleBlock"],
+  ["Nepal silhouette", "showMapSilhouette"],
+  ["Label leader lines", "showLeaderLines"],
+  ["Start/finish emphasis", "emphasizeEndpoints"],
+  ["Sequential day labels", "sequentialDayLabels"],
+  ["Extra arrowheads", "extraArrowheads"],
+  ["Stronger route colors", "vividTransportColors"],
+  ["Fill canvas", "fillCanvas"],
+  ["Larger day text", "largerDayText"],
+] as const;
+
+const defaultLabelStyle: TravelStop["labelStyle"] = {
+  fontSize: 1,
+  color: "#18221d",
+  bold: true,
+};
+
+const defaultPointStyle: TravelStop["pointStyle"] = {
+  fill: "#e9efeb",
+  showFill: true,
+  stroke: "#18221d",
+  showStroke: true,
+  strokeWidth: 2.5,
+};
+
+const defaultLegStyle: TravelLeg["style"] = {
+  line: "solid",
+  curvature: 0,
+  winding: 0,
+  noiseSeed: 42,
+  noiseAmplitude: 0,
+  noiseScale: 2,
+  noiseOctaves: 3,
+  noiseModulation: 0,
+  color: "#0f766e",
+};
 
 function CollapsibleSection({
   id,
@@ -77,10 +125,10 @@ function CollapsibleSection({
   children: React.ReactNode;
 }) {
   const storageKey = `mapper-section-${id}`;
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    setOpen(window.localStorage.getItem(storageKey) !== "closed");
+    setOpen(window.localStorage.getItem(storageKey) === "open");
   }, [storageKey]);
 
   return (
@@ -125,17 +173,18 @@ function ObjectRow({
   const toggleObjectVisibility = useEditorStore(
     (state) => state.toggleObjectVisibility,
   );
+  const deleteSelectedObjects = useEditorStore((state) => state.deleteSelectedObjects);
   const selected = selectedObjectId === id;
 
   return (
     <li
       className={cn(
-        "grid grid-cols-[1.6rem_1fr_2rem] items-center border-b border-sidebar-border",
-        selected && "bg-sidebar-accent",
+        "m-2 grid grid-cols-[2rem_1fr_auto] items-center rounded-xl border border-sidebar-border/70 bg-sidebar-accent/20 shadow-sm transition-colors hover:bg-sidebar-accent/45",
+        selected && "border-trail/60 bg-sidebar-accent shadow-[inset_3px_0_0_var(--trail)]",
       )}
     >
       <span
-        className="self-stretch border-r border-sidebar-border pt-3 text-center font-mono text-[9px] text-muted-foreground"
+        className="flex size-full min-h-12 items-center justify-center border-r border-sidebar-border/70 font-mono text-[9px] text-muted-foreground"
         aria-hidden="true"
       >
         {index}
@@ -147,7 +196,7 @@ function ObjectRow({
           onSelectComplete?.();
         }}
         aria-current={selected ? "true" : undefined}
-        className="focus-ring flex min-h-12 min-w-0 items-center gap-2 px-2 text-left"
+        className="focus-ring flex min-h-12 min-w-0 items-center gap-2 px-2.5 text-left"
       >
         <Icon
           className={cn(
@@ -166,12 +215,27 @@ function ObjectRow({
           </span>
         </span>
       </button>
-      <Switch
-        checked={visible}
-        onCheckedChange={() => toggleObjectVisibility(id)}
-        aria-label={`${visible ? "Hide" : "Show"} ${name}`}
-        className="scale-75"
-      />
+      <div className="flex items-center gap-1 pr-1.5">
+        <Switch
+          checked={visible}
+          onCheckedChange={() => toggleObjectVisibility(id)}
+          aria-label={`${visible ? "Hide" : "Show"} ${name}`}
+          className="scale-75"
+        />
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Delete ${name}`}
+          onClick={() => {
+            const store = useEditorStore.getState();
+            store.cancelFormatPainter();
+            store.selectObject(id);
+            deleteSelectedObjects();
+          }}
+        >
+          <Trash2 aria-hidden="true" />
+        </Button>
+      </div>
     </li>
   );
 }
@@ -290,9 +354,9 @@ function StopProperties({
   const updatePointIcon = useEditorStore((state) => state.updatePointIcon);
   const updateTravelStop = useEditorStore((state) => state.updateTravelStop);
   const project = useEditorStore((state) => state.project);
-  const iconOptions = project.kind === "travel"
-    ? [...builtinIcons, ...project.iconAssets.map((icon) => ({ ...icon, pack: "Imported" as const }))]
-    : builtinIcons;
+  const labelOffset = stop.labelOffset ?? [0, 0];
+  const labelStyle = { ...defaultLabelStyle, ...stop.labelStyle };
+  const pointStyle = { ...defaultPointStyle, ...stop.pointStyle };
   return (
     <section
       aria-labelledby={`${idPrefix}stop-properties`}
@@ -333,51 +397,51 @@ function StopProperties({
       </dl>
       <div className="grid gap-1.5">
         <Label htmlFor={`${idPrefix}stop-symbol`}>Point symbol</Label>
-        <Select value={stop.icon} onValueChange={(value) => value && updatePointIcon(stop.id, value)}>
-          <SelectTrigger id={`${idPrefix}stop-symbol`} className="w-full"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {iconOptions.map((icon) => <SelectItem key={icon.id} value={icon.id}>{icon.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <IconPicker
+          value={stop.icon}
+          onValueChange={(value) => value && updatePointIcon(stop.id, value)}
+          customIcons={project.kind === "travel" ? project.iconAssets : []}
+          label="Point symbol"
+        />
       </div>
       <p className="border-l-2 border-water pl-3 text-xs leading-5 text-muted-foreground">
         Point style
       </p>
       <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
         Background fill
-        <Switch checked={stop.pointStyle.showFill} onCheckedChange={(checked) => updateTravelStop(stop.id, { pointStyle: { ...stop.pointStyle, showFill: checked } })} />
+        <Switch checked={pointStyle.showFill} onCheckedChange={(checked) => updateTravelStop(stop.id, { pointStyle: { ...pointStyle, showFill: checked } })} />
       </label>
-      {stop.pointStyle.showFill ? (
+      {pointStyle.showFill ? (
       <div className="grid gap-1.5">
         <Label htmlFor={`${idPrefix}point-fill`}>Fill color</Label>
         <div className="flex items-center gap-2">
           <input
             id={`${idPrefix}point-fill`}
             type="color"
-            value={stop.pointStyle.fill}
-            onChange={(event) => updateTravelStop(stop.id, { pointStyle: { ...stop.pointStyle, fill: event.currentTarget.value } })}
+            value={pointStyle.fill}
+            onChange={(event) => updateTravelStop(stop.id, { pointStyle: { ...pointStyle, fill: event.currentTarget.value } })}
             className="size-8 cursor-pointer rounded border bg-transparent p-0.5"
           />
-          <span className="font-mono text-xs text-muted-foreground">{stop.pointStyle.fill}</span>
+          <span className="font-mono text-xs text-muted-foreground">{pointStyle.fill}</span>
         </div>
       </div>
       ) : null}
       <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
         Border stroke
-        <Switch checked={stop.pointStyle.showStroke} onCheckedChange={(checked) => updateTravelStop(stop.id, { pointStyle: { ...stop.pointStyle, showStroke: checked } })} />
+        <Switch checked={pointStyle.showStroke} onCheckedChange={(checked) => updateTravelStop(stop.id, { pointStyle: { ...pointStyle, showStroke: checked } })} />
       </label>
-      {stop.pointStyle.showStroke ? (
+      {pointStyle.showStroke ? (
       <div className="grid gap-1.5">
         <Label htmlFor={`${idPrefix}point-stroke`}>Stroke color</Label>
         <div className="flex items-center gap-2">
           <input
             id={`${idPrefix}point-stroke`}
             type="color"
-            value={stop.pointStyle.stroke}
-            onChange={(event) => updateTravelStop(stop.id, { pointStyle: { ...stop.pointStyle, stroke: event.currentTarget.value } })}
+            value={pointStyle.stroke}
+            onChange={(event) => updateTravelStop(stop.id, { pointStyle: { ...pointStyle, stroke: event.currentTarget.value } })}
             className="size-8 cursor-pointer rounded border bg-transparent p-0.5"
           />
-          <span className="font-mono text-xs text-muted-foreground">{stop.pointStyle.stroke}</span>
+          <span className="font-mono text-xs text-muted-foreground">{pointStyle.stroke}</span>
         </div>
       </div>
       ) : null}
@@ -401,7 +465,7 @@ function StopProperties({
       <NoiseControl
         id={`${idPrefix}label-offset-x`}
         label="Label horizontal"
-        value={stop.labelOffset[0]}
+        value={labelOffset[0]}
         min={-160}
         max={160}
         step={1}
@@ -411,7 +475,7 @@ function StopProperties({
       <NoiseControl
         id={`${idPrefix}label-offset-y`}
         label="Label vertical"
-        value={stop.labelOffset[1]}
+        value={labelOffset[1]}
         min={-120}
         max={120}
         step={1}
@@ -424,7 +488,7 @@ function StopProperties({
       <NoiseControl
         id={`${idPrefix}label-font-size`}
         label="Font size"
-        value={stop.labelStyle.fontSize}
+        value={labelStyle.fontSize}
         min={0.5}
         max={3}
         step={0.1}
@@ -436,16 +500,16 @@ function StopProperties({
           <input
             id={`${idPrefix}label-color`}
             type="color"
-            value={stop.labelStyle.color}
+            value={labelStyle.color}
             onChange={(event) => updateStopLabelStyle(stop.id, "color", event.currentTarget.value)}
             className="size-8 cursor-pointer rounded border bg-transparent p-0.5"
           />
-          <span className="font-mono text-xs text-muted-foreground">{stop.labelStyle.color}</span>
+          <span className="font-mono text-xs text-muted-foreground">{labelStyle.color}</span>
         </div>
       </div>
       <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
         Bold text
-        <Switch checked={stop.labelStyle.bold} onCheckedChange={(checked) => updateStopLabelStyle(stop.id, "bold", checked)} />
+        <Switch checked={labelStyle.bold} onCheckedChange={(checked) => updateStopLabelStyle(stop.id, "bold", checked)} />
       </label>
     </section>
   );
@@ -466,12 +530,7 @@ function LegProperties({
   const updateLegIcon = useEditorStore((state) => state.updateLegIcon);
   const project = useEditorStore((state) => state.project);
   const stopNames = new Map(stops.map((stop) => [stop.id, stop.name]));
-  const iconOptions = [
-    { id: "", name: "None (show transport mode)" },
-    ...builtinIcons,
-    ...project.iconAssets.map((icon) => ({ ...icon, pack: "Imported" as const })),
-  ];
-
+  const style = { ...defaultLegStyle, ...leg.style };
   return (
     <section
       aria-labelledby={`${idPrefix}leg-properties`}
@@ -491,12 +550,13 @@ function LegProperties({
       <EditLegDialog leg={leg} stops={stops} />
       <div className="grid gap-1.5">
         <Label htmlFor={`${idPrefix}leg-icon`}>Symbol (replaces transport label)</Label>
-        <Select value={leg.iconId ?? ""} onValueChange={(value) => updateLegIcon(leg.id, value || undefined)}>
-          <SelectTrigger id={`${idPrefix}leg-icon`} className="w-full"><SelectValue placeholder="None (show transport mode)" /></SelectTrigger>
-          <SelectContent>
-            {iconOptions.map((icon) => <SelectItem key={icon.id || "none"} value={icon.id}>{icon.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <IconPicker
+          value={leg.iconId ?? null}
+          onValueChange={(value) => updateLegIcon(leg.id, value || undefined)}
+          customIcons={project.kind === "travel" ? project.iconAssets : []}
+          label="Leg symbol"
+          allowNone
+        />
       </div>
       <label className="flex min-h-9 items-center justify-between gap-3 text-sm">
         Show destination day on arrow
@@ -505,7 +565,7 @@ function LegProperties({
       <NoiseControl
         id={`${idPrefix}curvature`}
         label="Route curve"
-        value={leg.style.curvature}
+        value={style.curvature}
         min={-10}
         max={10}
         step={0.02}
@@ -513,7 +573,7 @@ function LegProperties({
       />
       <div className="grid gap-1.5">
         <Label htmlFor={`${idPrefix}line-style`}>Line style</Label>
-        <Select value={leg.style.line} onValueChange={(value) => value && updateLegStyle(leg.id, "line", value as TravelLeg["style"]["line"])}>
+        <Select value={style.line} onValueChange={(value) => value && updateLegStyle(leg.id, "line", value as TravelLeg["style"]["line"])}>
           <SelectTrigger id={`${idPrefix}line-style`} className="w-full"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="solid">Solid</SelectItem>
@@ -522,16 +582,16 @@ function LegProperties({
           </SelectContent>
         </Select>
       </div>
-      <NoiseControl id={`${idPrefix}noise-amplitude`} label="Perlin amplitude" value={leg.style.noiseAmplitude} min={-10} max={10} step={0.01} onChange={(value) => updateLegStyle(leg.id, "noiseAmplitude", value)} />
-      <NoiseControl id={`${idPrefix}noise-seed`} label="Noise seed" value={leg.style.noiseSeed} min={0} max={2_147_483_647} step={1} onChange={(value) => updateLegStyle(leg.id, "noiseSeed", Math.round(value))} />
-      <NoiseControl id={`${idPrefix}noise-scale`} label="Noise scale" value={leg.style.noiseScale} min={0.25} max={8} step={0.25} onChange={(value) => updateLegStyle(leg.id, "noiseScale", value)} />
-      <NoiseControl id={`${idPrefix}noise-octaves`} label="Noise octaves" value={leg.style.noiseOctaves} min={1} max={6} step={1} onChange={(value) => updateLegStyle(leg.id, "noiseOctaves", Math.round(value))} />
-      <NoiseControl id={`${idPrefix}noise-modulation`} label="Noise modulation" value={leg.style.noiseModulation} min={-10} max={10} step={0.01} onChange={(value) => updateLegStyle(leg.id, "noiseModulation", value)} />
+      <NoiseControl id={`${idPrefix}noise-amplitude`} label="Perlin amplitude" value={style.noiseAmplitude} min={-10} max={10} step={0.01} onChange={(value) => updateLegStyle(leg.id, "noiseAmplitude", value)} />
+      <NoiseControl id={`${idPrefix}noise-seed`} label="Noise seed" value={style.noiseSeed} min={0} max={2_147_483_647} step={1} onChange={(value) => updateLegStyle(leg.id, "noiseSeed", Math.round(value))} />
+      <NoiseControl id={`${idPrefix}noise-scale`} label="Noise scale" value={style.noiseScale} min={0.25} max={8} step={0.25} onChange={(value) => updateLegStyle(leg.id, "noiseScale", value)} />
+      <NoiseControl id={`${idPrefix}noise-octaves`} label="Noise octaves" value={style.noiseOctaves} min={1} max={6} step={1} onChange={(value) => updateLegStyle(leg.id, "noiseOctaves", Math.round(value))} />
+      <NoiseControl id={`${idPrefix}noise-modulation`} label="Noise modulation" value={style.noiseModulation} min={-10} max={10} step={0.01} onChange={(value) => updateLegStyle(leg.id, "noiseModulation", value)} />
       <Button variant="outline" size="sm" onClick={() => applyLegShapeToAll(leg.id)}>Apply route shape to all legs</Button>
       <NoiseControl
         id={`${idPrefix}winding`}
         label="Hand-drawn winding"
-        value={leg.style.winding}
+        value={style.winding}
         min={-10}
         max={10}
         step={0.02}
@@ -544,7 +604,7 @@ function LegProperties({
         </div>
         <div>
           <dt className="text-muted-foreground">Line</dt>
-          <dd className="font-mono font-medium capitalize">{leg.style.line}</dd>
+          <dd className="font-mono font-medium capitalize">{style.line}</dd>
         </div>
       </dl>
     </section>
@@ -562,9 +622,40 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
   const setMapBackground = useEditorStore((state) => state.setMapBackground);
   const updatePresentation = useEditorStore((state) => state.updatePresentation);
   const resetPresentation = useEditorStore((state) => state.resetPresentation);
+  const addBoundaryAsset = useEditorStore((state) => state.addBoundaryAsset);
   const presentation = useEditorStore((state) => state.project.presentation);
+  const [boundaryQuery, setBoundaryQuery] = useState("Nepal");
+  const [boundaryStatus, setBoundaryStatus] = useState<string | null>(null);
+  const [boundaryBusy, setBoundaryBusy] = useState(false);
+  const lineScale = Number.isFinite(presentation.lineScale) ? presentation.lineScale : 1;
+  const textScale = Number.isFinite(presentation.textScale) ? presentation.textScale : 1;
+  const symbolScale = Number.isFinite(presentation.symbolScale) ? presentation.symbolScale : 1;
 
   if (!mapSettings) return null;
+
+  async function importOsmBoundary() {
+    setBoundaryBusy(true);
+    setBoundaryStatus(null);
+    try {
+      addBoundaryAsset(await fetchOsmBoundary(boundaryQuery));
+      setBoundaryStatus("Boundary imported from OpenStreetMap.");
+    } catch (reason) {
+      setBoundaryStatus(reason instanceof Error ? reason.message : "Boundary import failed.");
+    } finally {
+      setBoundaryBusy(false);
+    }
+  }
+
+  async function importBoundaryFile(file: File | undefined) {
+    if (!file) return;
+    setBoundaryStatus(null);
+    try {
+      addBoundaryAsset(boundaryFromGeoJson(JSON.parse(await file.text()), file.name.replace(/\.geojson|\.json$/i, "")));
+      setBoundaryStatus("Boundary imported from GeoJSON.");
+    } catch (reason) {
+      setBoundaryStatus(reason instanceof Error ? reason.message : "GeoJSON import failed.");
+    }
+  }
 
   return (
     <section
@@ -637,6 +728,15 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
               onCheckedChange={(checked) => updatePresentation("showModeIcons", checked)}
             />
           </label>
+          {symbolicPresentationOptions.map(([label, key]) => (
+            <label key={key} className="flex min-h-8 items-center justify-between gap-3 text-sm">
+              {label}
+              <Switch
+                checked={Boolean(presentation[key])}
+                onCheckedChange={(checked) => updatePresentation(key, checked)}
+              />
+            </label>
+          ))}
         </>
       ) : null}
       <div className="grid gap-1.5">
@@ -681,15 +781,71 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
           <dd className="font-mono">Mapzen DEM</dd>
         </div>
       </dl>
+      {mapSettings.display === "symbolic" ? (
+        <div className="grid gap-3 border-t pt-4">
+          <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+            Boundary assets
+          </p>
+          <div className="grid gap-2">
+            <Label htmlFor={`${idPrefix}boundary-search`}>OpenStreetMap place</Label>
+            <div className="flex gap-2">
+              <Input id={`${idPrefix}boundary-search`} value={boundaryQuery} onChange={(event) => setBoundaryQuery(event.currentTarget.value)} placeholder="Nepal, Gandaki Province..." />
+              <Button type="button" variant="outline" size="icon" disabled={boundaryBusy || !boundaryQuery.trim()} onClick={() => void importOsmBoundary()} aria-label="Import OSM boundary">
+                <Search aria-hidden="true" />
+              </Button>
+            </div>
+          </div>
+          <label className="focus-ring flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border bg-card px-3 text-sm font-medium hover:bg-muted">
+            <Upload aria-hidden="true" className="size-4" /> Upload GeoJSON boundary
+            <input type="file" accept=".geojson,.json,application/geo+json,application/json" className="sr-only" onChange={(event) => void importBoundaryFile(event.currentTarget.files?.[0])} />
+          </label>
+          {boundaryStatus ? <p className="text-xs leading-5 text-muted-foreground">{boundaryStatus}</p> : null}
+        </div>
+      ) : null}
       <div className="grid gap-4 border-t pt-4">
         <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
           Presentation scale
         </p>
         <Button variant="outline" size="sm" onClick={resetPresentation}>Reset scales</Button>
-        <NoiseControl id={`${idPrefix}line-scale`} label="Lines" value={presentation.lineScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("lineScale", value)} />
-        <NoiseControl id={`${idPrefix}text-scale`} label="Text" value={presentation.textScale} min={0.5} max={3} step={0.05} onChange={(value) => updatePresentation("textScale", value)} />
-        <NoiseControl id={`${idPrefix}symbol-global-scale`} label="Symbols" value={presentation.symbolScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("symbolScale", value)} />
+        <NoiseControl id={`${idPrefix}line-scale`} label="Lines" value={lineScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("lineScale", value)} />
+        <NoiseControl id={`${idPrefix}text-scale`} label="Text" value={textScale} min={0.5} max={3} step={0.05} onChange={(value) => updatePresentation("textScale", value)} />
+        <NoiseControl id={`${idPrefix}symbol-global-scale`} label="Symbols" value={symbolScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("symbolScale", value)} />
       </div>
+    </section>
+  );
+}
+
+function ProjectTitleProperties({ idPrefix }: { idPrefix: string }) {
+  const project = useEditorStore((state) => state.project);
+  const updateProjectMeta = useEditorStore((state) => state.updateProjectMeta);
+
+  if (project.kind !== "travel") return null;
+
+  return (
+    <section aria-labelledby={`${idPrefix}title-properties`} className="grid gap-4 p-4">
+      <div>
+        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-water">
+          Standalone heading
+        </p>
+        <h2 id={`${idPrefix}title-properties`} className="mt-1 text-sm font-bold">
+          Title block
+        </h2>
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}project-title`}>Title</Label>
+        <Input id={`${idPrefix}project-title`} value={project.name} maxLength={120} onChange={(event) => updateProjectMeta({ name: event.currentTarget.value })} />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}project-subtitle`}>Subtitle</Label>
+        <Input id={`${idPrefix}project-subtitle`} value={project.subtitle} maxLength={160} onChange={(event) => updateProjectMeta({ subtitle: event.currentTarget.value })} />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}project-days`}>Duration days</Label>
+        <Input id={`${idPrefix}project-days`} type="number" min={1} max={9999} step={1} value={project.durationDays} onChange={(event) => updateProjectMeta({ durationDays: event.currentTarget.valueAsNumber })} />
+      </div>
+      <p className="border-l-2 border-water pl-3 text-xs leading-5 text-muted-foreground">
+        Select the title directly on the canvas or use the Canvas row in the sidebar.
+      </p>
     </section>
   );
 }
@@ -731,6 +887,14 @@ function SymbolProperties({
   const updateSymbolTransform = useEditorStore(
     (state) => state.updateSymbolTransform,
   );
+  useEffect(() => {
+    mapperDebug("object-panel", "symbol properties mounted", {
+      id: symbol.id,
+      iconId: symbol.iconId,
+      scale: symbol.scale,
+      rotation: symbol.rotation,
+    });
+  }, [symbol.iconId, symbol.id, symbol.rotation, symbol.scale]);
   return (
     <section aria-labelledby={`${idPrefix}symbol-properties`} className="grid gap-5 p-4">
       <div>
@@ -760,38 +924,126 @@ function SymbolProperties({
   );
 }
 
+function BoundaryProperties({ boundary, idPrefix }: { boundary: BoundaryAsset; idPrefix: string }) {
+  const updateBoundaryAsset = useEditorStore((state) => state.updateBoundaryAsset);
+  return (
+    <section aria-labelledby={`${idPrefix}boundary-properties`} className="grid gap-4 p-4">
+      <div>
+        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-terrain">Boundary asset</p>
+        <h2 id={`${idPrefix}boundary-properties`} className="mt-1 text-sm font-bold">{boundary.name}</h2>
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}boundary-name`}>Name</Label>
+        <Input id={`${idPrefix}boundary-name`} value={boundary.name} maxLength={100} onChange={(event) => updateBoundaryAsset(boundary.id, { name: event.currentTarget.value })} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-1.5">
+          <Label htmlFor={`${idPrefix}boundary-fill`}>Fill</Label>
+          <input id={`${idPrefix}boundary-fill`} type="color" value={boundary.fill} onChange={(event) => updateBoundaryAsset(boundary.id, { fill: event.currentTarget.value })} className="h-8 w-full cursor-pointer rounded border bg-transparent p-0.5" />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor={`${idPrefix}boundary-stroke`}>Stroke</Label>
+          <input id={`${idPrefix}boundary-stroke`} type="color" value={boundary.stroke} onChange={(event) => updateBoundaryAsset(boundary.id, { stroke: event.currentTarget.value })} className="h-8 w-full cursor-pointer rounded border bg-transparent p-0.5" />
+        </div>
+      </div>
+      <NoiseControl id={`${idPrefix}boundary-opacity`} label="Opacity" value={boundary.opacity} min={0} max={1} step={0.01} onChange={(value) => updateBoundaryAsset(boundary.id, { opacity: value })} />
+      <p className="border-l-2 border-terrain pl-3 text-xs leading-5 text-muted-foreground">
+        {boundary.attribution}. Source: {boundary.source || "project asset"}.
+      </p>
+    </section>
+  );
+}
+
+function FormatPainterControls() {
+  const project = useEditorStore((state) => state.project);
+  const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
+  const formatClipboard = useEditorStore((state) => state.formatClipboard);
+  const formatPainterActive = useEditorStore((state) => state.formatPainterActive);
+  const copySelectedFormat = useEditorStore((state) => state.copySelectedFormat);
+  const cancelFormatPainter = useEditorStore((state) => state.cancelFormatPainter);
+
+  if (project.kind !== "travel") return null;
+
+  const canCopy = Boolean(
+    selectedObjectId &&
+      (project.stops.some((item) => item.id === selectedObjectId) ||
+        project.legs.some((item) => item.id === selectedObjectId) ||
+        project.symbols.some((item) => item.id === selectedObjectId) ||
+        project.scatter.some((item) => item.id === selectedObjectId)),
+  );
+  const copiedLabel = formatClipboard
+    ? formatClipboard.kind.replace("travel-", "")
+    : "nothing";
+
+  return (
+    <div className="grid gap-2 border-b border-sidebar-border bg-sidebar-accent/20 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+            Format painter
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {formatPainterActive ? `Click a ${copiedLabel} to apply.` : "Copy styling, then click a matching target."}
+          </p>
+        </div>
+        {formatPainterActive ? (
+          <Button variant="ghost" size="icon-sm" aria-label="Cancel format painter" onClick={cancelFormatPainter}>
+            <X aria-hidden="true" />
+          </Button>
+        ) : null}
+      </div>
+      <Button variant={formatPainterActive ? "default" : "outline"} size="sm" disabled={!canCopy} onClick={copySelectedFormat}>
+        <Paintbrush aria-hidden="true" /> Copy format
+      </Button>
+    </div>
+  );
+}
+
 function SelectedProperties({ idPrefix }: { idPrefix: string }) {
   const project = useEditorStore((state) => state.project);
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
   if (project.kind !== "travel") return null;
+  const boundaries = project.boundaries ?? [];
 
   if (selectedObjectId === "terrain-context") {
-    return <TerrainProperties idPrefix={idPrefix} />;
+    return <><FormatPainterControls /><TerrainProperties idPrefix={idPrefix} /></>;
+  }
+
+  if (selectedObjectId === "project-title") {
+    return <><FormatPainterControls /><ProjectTitleProperties idPrefix={idPrefix} /></>;
   }
 
   const stop = project.stops.find((item) => item.id === selectedObjectId);
-  if (stop) return <StopProperties stop={stop} idPrefix={idPrefix} />;
+  if (stop) return <><FormatPainterControls /><StopProperties stop={stop} idPrefix={idPrefix} /></>;
 
   const leg = project.legs.find((item) => item.id === selectedObjectId);
   if (leg) {
     return (
-      <LegProperties
-        leg={leg}
-        idPrefix={idPrefix}
-        stops={project.stops}
-      />
+      <>
+        <FormatPainterControls />
+        <LegProperties
+          leg={leg}
+          idPrefix={idPrefix}
+          stops={project.stops}
+        />
+      </>
     );
   }
 
   const symbol = project.symbols.find((item) => item.id === selectedObjectId);
-  if (symbol) return <SymbolProperties symbol={symbol} idPrefix={idPrefix} />;
+  if (symbol) return <><FormatPainterControls /><SymbolProperties symbol={symbol} idPrefix={idPrefix} /></>;
   const scatter = project.scatter.find((item) => item.id === selectedObjectId);
-  if (scatter) return <ScatterProperties scatter={scatter} idPrefix={idPrefix} />;
+  if (scatter) return <><FormatPainterControls /><ScatterProperties scatter={scatter} idPrefix={idPrefix} /></>;
+  const boundary = boundaries.find((item) => item.id === selectedObjectId);
+  if (boundary) return <><FormatPainterControls /><BoundaryProperties boundary={boundary} idPrefix={idPrefix} /></>;
 
   return (
-    <p className="p-4 text-sm text-muted-foreground">
-      Select a stop, travel leg, or terrain layer to edit it.
-    </p>
+    <>
+      <FormatPainterControls />
+      <p className="p-4 text-sm text-muted-foreground">
+        Select a stop, travel leg, or terrain layer to edit it.
+      </p>
+    </>
   );
 }
 
@@ -981,6 +1233,7 @@ export function ObjectPanel({
   const project = useEditorStore((state) => state.project);
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
   const selectObject = useEditorStore((state) => state.selectObject);
+  const boundaries = project.kind === "travel" ? project.boundaries ?? [] : [];
 
   if (project.kind !== "travel") {
     return <TrailObjectPanel idPrefix={idPrefix} onObjectSelected={onObjectSelected} />;
@@ -1006,6 +1259,70 @@ export function ObjectPanel({
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <nav aria-label="Itinerary objects">
+          <CollapsibleSection id={`${idPrefix}travel-canvas`} label="Canvas" count={2}>
+            <ol>
+              <li
+                className={cn(
+                  "m-2 grid grid-cols-[2rem_1fr_auto] items-center rounded-xl border border-sidebar-border/70 bg-sidebar-accent/20 shadow-sm transition-colors hover:bg-sidebar-accent/45",
+                  selectedObjectId === "project-title" && "border-water/60 bg-sidebar-accent shadow-[inset_3px_0_0_var(--water)]",
+                )}
+              >
+                <span className="flex size-full min-h-12 items-center justify-center border-r border-sidebar-border/70 font-mono text-[9px] text-muted-foreground">A</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    selectObject("project-title");
+                    onObjectSelected?.();
+                  }}
+                  aria-current={selectedObjectId === "project-title" ? "true" : undefined}
+                  className="focus-ring flex min-h-12 min-w-0 items-center gap-2 px-2.5 text-left"
+                >
+                  <FileCode2 className="size-4 shrink-0 text-water" aria-hidden="true" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-semibold">Title block</span>
+                    <span className="block truncate font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground">
+                      {project.name}
+                    </span>
+                  </span>
+                </button>
+                <Switch
+                  checked={project.presentation.showTitleBlock}
+                  onCheckedChange={(checked) => useEditorStore.getState().updatePresentation("showTitleBlock", checked)}
+                  aria-label={`${project.presentation.showTitleBlock ? "Hide" : "Show"} title block`}
+                  className="mr-2 scale-75"
+                />
+              </li>
+              <li
+                className={cn(
+                  "m-2 grid grid-cols-[2rem_1fr_auto] items-center rounded-xl border border-sidebar-border/70 bg-sidebar-accent/20 shadow-sm transition-colors hover:bg-sidebar-accent/45",
+                  selectedObjectId === "terrain-context" && "border-terrain/60 bg-sidebar-accent shadow-[inset_3px_0_0_var(--terrain)]",
+                )}
+              >
+                <span className="flex size-full min-h-12 items-center justify-center border-r border-sidebar-border/70 font-mono text-[9px] text-muted-foreground">M</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    selectObject("terrain-context");
+                    onObjectSelected?.();
+                  }}
+                  aria-current={selectedObjectId === "terrain-context" ? "true" : undefined}
+                  className="focus-ring flex min-h-12 min-w-0 items-center gap-2 px-2.5 text-left"
+                >
+                  <Mountain className="size-4 shrink-0 text-terrain" aria-hidden="true" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-semibold">Terrain</span>
+                    <span className="block truncate font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground">DEM contours</span>
+                  </span>
+                </button>
+                <Switch
+                  checked={project.map.showContours}
+                  onCheckedChange={() => useEditorStore.getState().toggleContours()}
+                  aria-label={`${project.map.showContours ? "Hide" : "Show"} contours`}
+                  className="mr-2 scale-75"
+                />
+              </li>
+            </ol>
+          </CollapsibleSection>
           <CollapsibleSection id={`${idPrefix}travel-stops`} label="Stops" count={project.stops.length}>
             <ol>
             {project.stops.map((stop, index) => (
@@ -1078,43 +1395,25 @@ export function ObjectPanel({
             </ol>
           </CollapsibleSection>
           ) : null}
-          <CollapsibleSection id={`${idPrefix}travel-context`} label="Map context" count={1}>
+          {boundaries.length ? (
+          <CollapsibleSection id={`${idPrefix}travel-boundaries`} label="Boundaries" count={boundaries.length}>
             <ol>
-            <li
-              className={cn(
-                "grid grid-cols-[1.6rem_1fr_2rem] items-center border-b border-sidebar-border",
-                selectedObjectId === "terrain-context" && "bg-sidebar-accent",
-              )}
-            >
-              <span className="self-stretch border-r border-sidebar-border" />
-              <button
-                type="button"
-                onClick={() => {
-                  selectObject("terrain-context");
-                  onObjectSelected?.();
-                }}
-                aria-current={
-                  selectedObjectId === "terrain-context" ? "true" : undefined
-                }
-                className="focus-ring flex min-h-12 items-center gap-2 px-2 text-left"
-              >
-                <Mountain className="size-4 text-terrain" aria-hidden="true" />
-                <span>
-                  <span className="block text-[13px] font-semibold">Terrain</span>
-                  <span className="block font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground">
-                    DEM contours
-                  </span>
-                </span>
-              </button>
-              <Switch
-                checked={project.map.showContours}
-                onCheckedChange={() => useEditorStore.getState().toggleContours()}
-                aria-label={`${project.map.showContours ? "Hide" : "Show"} contours`}
-                className="scale-75"
+            {boundaries.map((boundary, index) => (
+              <ObjectRow
+                key={boundary.id}
+                id={boundary.id}
+                name={boundary.name}
+                detail={boundary.source || "boundary asset"}
+                visible={boundary.visible}
+                index={index + 1}
+                icon={MapPinned}
+                accent="terrain"
+                onSelectComplete={onObjectSelected}
               />
-            </li>
+            ))}
             </ol>
           </CollapsibleSection>
+          ) : null}
         </nav>
         <Separator />
         <CollapsibleSection id={`${idPrefix}travel-properties`} label="Selected properties">

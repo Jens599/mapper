@@ -21,8 +21,11 @@ export function ThemeToggle() {
   }, []);
 
   function toggleTheme() {
+    if (!mounted) return;
     setTheme(dark ? "light" : "dark");
   }
+
+  const label = mounted ? `Use ${dark ? "light" : "dark"} theme` : "Toggle theme";
 
   return (
     <Tooltip>
@@ -31,13 +34,13 @@ export function ThemeToggle() {
           variant="ghost"
           size="icon-sm"
           onClick={toggleTheme}
-          aria-label={`Use ${dark ? "light" : "dark"} theme`}
+          aria-label={label}
           disabled={!mounted}
         >
-          {dark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
+          {!mounted ? <Moon aria-hidden="true" /> : dark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{dark ? "Light theme" : "Dark theme"}</TooltipContent>
+      <TooltipContent>{mounted ? (dark ? "Light theme" : "Dark theme") : "Theme"}</TooltipContent>
     </Tooltip>
   );
 }

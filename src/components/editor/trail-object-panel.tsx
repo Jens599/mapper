@@ -3,15 +3,14 @@
 import { ChevronDown, MapPin, Mountain, Route } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { IconPicker } from "@/components/editor/icon-picker";
 import { NoiseControl } from "@/components/editor/noise-control";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { builtinIcons } from "@/lib/builtin-icons";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/store/editor-store";
 
@@ -244,13 +243,13 @@ export function TrailObjectPanel({ idPrefix = "", onObjectSelected }: { idPrefix
             </p>
             <div className="grid gap-1.5">
               <Label htmlFor={`${idPrefix}waypoint-symbol`}>Point symbol</Label>
-              <Select value={selectedPoint.iconId ?? "none"} onValueChange={(value) => value && updatePointIcon(selectedPoint.id, value === "none" ? null : value)}>
-                <SelectTrigger id={`${idPrefix}waypoint-symbol`} className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No symbol</SelectItem>
-                  {[...builtinIcons, ...project.iconAssets.map((icon) => ({ ...icon, pack: "Imported" as const }))].map((icon) => <SelectItem key={icon.id} value={icon.id}>{icon.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <IconPicker
+                value={selectedPoint.iconId ?? null}
+                onValueChange={(value) => updatePointIcon(selectedPoint.id, value)}
+                customIcons={project.iconAssets}
+                label="Waypoint symbol"
+                allowNone
+              />
             </div>
           </section>
         ) : null}
