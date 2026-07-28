@@ -3,6 +3,7 @@
 import {
   CarFront,
   ChevronDown,
+  FileCode2,
   Footprints,
   MapPinned,
   MapPin,
@@ -13,6 +14,7 @@ import {
   Plus,
   Ship,
   TrainFront,
+  Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -139,17 +141,18 @@ function ObjectRow({
   const toggleObjectVisibility = useEditorStore(
     (state) => state.toggleObjectVisibility,
   );
+  const deleteSelectedObjects = useEditorStore((state) => state.deleteSelectedObjects);
   const selected = selectedObjectId === id;
 
   return (
     <li
       className={cn(
-        "grid grid-cols-[1.6rem_1fr_2rem] items-center border-b border-sidebar-border",
-        selected && "bg-sidebar-accent",
+        "m-2 grid grid-cols-[2rem_1fr_auto] items-center rounded-xl border border-sidebar-border/70 bg-sidebar-accent/20 shadow-sm transition-colors hover:bg-sidebar-accent/45",
+        selected && "border-trail/60 bg-sidebar-accent shadow-[inset_3px_0_0_var(--trail)]",
       )}
     >
       <span
-        className="self-stretch border-r border-sidebar-border pt-3 text-center font-mono text-[9px] text-muted-foreground"
+        className="flex size-full min-h-12 items-center justify-center border-r border-sidebar-border/70 font-mono text-[9px] text-muted-foreground"
         aria-hidden="true"
       >
         {index}
@@ -161,7 +164,7 @@ function ObjectRow({
           onSelectComplete?.();
         }}
         aria-current={selected ? "true" : undefined}
-        className="focus-ring flex min-h-12 min-w-0 items-center gap-2 px-2 text-left"
+        className="focus-ring flex min-h-12 min-w-0 items-center gap-2 px-2.5 text-left"
       >
         <Icon
           className={cn(
@@ -180,12 +183,25 @@ function ObjectRow({
           </span>
         </span>
       </button>
-      <Switch
-        checked={visible}
-        onCheckedChange={() => toggleObjectVisibility(id)}
-        aria-label={`${visible ? "Hide" : "Show"} ${name}`}
-        className="scale-75"
-      />
+      <div className="flex items-center gap-1 pr-1.5">
+        <Switch
+          checked={visible}
+          onCheckedChange={() => toggleObjectVisibility(id)}
+          aria-label={`${visible ? "Hide" : "Show"} ${name}`}
+          className="scale-75"
+        />
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Delete ${name}`}
+          onClick={() => {
+            useEditorStore.getState().selectObject(id);
+            deleteSelectedObjects();
+          }}
+        >
+          <Trash2 aria-hidden="true" />
+        </Button>
+      </div>
     </li>
   );
 }
@@ -720,6 +736,41 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
   );
 }
 
+function ProjectTitleProperties({ idPrefix }: { idPrefix: string }) {
+  const project = useEditorStore((state) => state.project);
+  const updateProjectMeta = useEditorStore((state) => state.updateProjectMeta);
+
+  if (project.kind !== "travel") return null;
+
+  return (
+    <section aria-labelledby={`${idPrefix}title-properties`} className="grid gap-4 p-4">
+      <div>
+        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-water">
+          Standalone heading
+        </p>
+        <h2 id={`${idPrefix}title-properties`} className="mt-1 text-sm font-bold">
+          Title block
+        </h2>
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}project-title`}>Title</Label>
+        <Input id={`${idPrefix}project-title`} value={project.name} maxLength={120} onChange={(event) => updateProjectMeta({ name: event.currentTarget.value })} />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}project-subtitle`}>Subtitle</Label>
+        <Input id={`${idPrefix}project-subtitle`} value={project.subtitle} maxLength={160} onChange={(event) => updateProjectMeta({ subtitle: event.currentTarget.value })} />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}project-days`}>Duration days</Label>
+        <Input id={`${idPrefix}project-days`} type="number" min={1} max={9999} step={1} value={project.durationDays} onChange={(event) => updateProjectMeta({ durationDays: event.currentTarget.valueAsNumber })} />
+      </div>
+      <p className="border-l-2 border-water pl-3 text-xs leading-5 text-muted-foreground">
+        Select the title directly on the canvas or use the Canvas row in the sidebar.
+      </p>
+    </section>
+  );
+}
+
 function ScatterProperties({
   scatter,
   idPrefix,
@@ -793,6 +844,10 @@ function SelectedProperties({ idPrefix }: { idPrefix: string }) {
 
   if (selectedObjectId === "terrain-context") {
     return <TerrainProperties idPrefix={idPrefix} />;
+  }
+
+  if (selectedObjectId === "project-title") {
+    return <ProjectTitleProperties idPrefix={idPrefix} />;
   }
 
   const stop = project.stops.find((item) => item.id === selectedObjectId);
@@ -1032,6 +1087,70 @@ export function ObjectPanel({
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <nav aria-label="Itinerary objects">
+          <CollapsibleSection id={`${idPrefix}travel-canvas`} label="Canvas" count={2}>
+            <ol>
+              <li
+                className={cn(
+                  "m-2 grid grid-cols-[2rem_1fr_auto] items-center rounded-xl border border-sidebar-border/70 bg-sidebar-accent/20 shadow-sm transition-colors hover:bg-sidebar-accent/45",
+                  selectedObjectId === "project-title" && "border-water/60 bg-sidebar-accent shadow-[inset_3px_0_0_var(--water)]",
+                )}
+              >
+                <span className="flex size-full min-h-12 items-center justify-center border-r border-sidebar-border/70 font-mono text-[9px] text-muted-foreground">A</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    selectObject("project-title");
+                    onObjectSelected?.();
+                  }}
+                  aria-current={selectedObjectId === "project-title" ? "true" : undefined}
+                  className="focus-ring flex min-h-12 min-w-0 items-center gap-2 px-2.5 text-left"
+                >
+                  <FileCode2 className="size-4 shrink-0 text-water" aria-hidden="true" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-semibold">Title block</span>
+                    <span className="block truncate font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground">
+                      {project.name}
+                    </span>
+                  </span>
+                </button>
+                <Switch
+                  checked={project.presentation.showTitleBlock}
+                  onCheckedChange={(checked) => useEditorStore.getState().updatePresentation("showTitleBlock", checked)}
+                  aria-label={`${project.presentation.showTitleBlock ? "Hide" : "Show"} title block`}
+                  className="mr-2 scale-75"
+                />
+              </li>
+              <li
+                className={cn(
+                  "m-2 grid grid-cols-[2rem_1fr_auto] items-center rounded-xl border border-sidebar-border/70 bg-sidebar-accent/20 shadow-sm transition-colors hover:bg-sidebar-accent/45",
+                  selectedObjectId === "terrain-context" && "border-terrain/60 bg-sidebar-accent shadow-[inset_3px_0_0_var(--terrain)]",
+                )}
+              >
+                <span className="flex size-full min-h-12 items-center justify-center border-r border-sidebar-border/70 font-mono text-[9px] text-muted-foreground">M</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    selectObject("terrain-context");
+                    onObjectSelected?.();
+                  }}
+                  aria-current={selectedObjectId === "terrain-context" ? "true" : undefined}
+                  className="focus-ring flex min-h-12 min-w-0 items-center gap-2 px-2.5 text-left"
+                >
+                  <Mountain className="size-4 shrink-0 text-terrain" aria-hidden="true" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-semibold">Terrain</span>
+                    <span className="block truncate font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground">DEM contours</span>
+                  </span>
+                </button>
+                <Switch
+                  checked={project.map.showContours}
+                  onCheckedChange={() => useEditorStore.getState().toggleContours()}
+                  aria-label={`${project.map.showContours ? "Hide" : "Show"} contours`}
+                  className="mr-2 scale-75"
+                />
+              </li>
+            </ol>
+          </CollapsibleSection>
           <CollapsibleSection id={`${idPrefix}travel-stops`} label="Stops" count={project.stops.length}>
             <ol>
             {project.stops.map((stop, index) => (
@@ -1104,43 +1223,6 @@ export function ObjectPanel({
             </ol>
           </CollapsibleSection>
           ) : null}
-          <CollapsibleSection id={`${idPrefix}travel-context`} label="Map context" count={1}>
-            <ol>
-            <li
-              className={cn(
-                "grid grid-cols-[1.6rem_1fr_2rem] items-center border-b border-sidebar-border",
-                selectedObjectId === "terrain-context" && "bg-sidebar-accent",
-              )}
-            >
-              <span className="self-stretch border-r border-sidebar-border" />
-              <button
-                type="button"
-                onClick={() => {
-                  selectObject("terrain-context");
-                  onObjectSelected?.();
-                }}
-                aria-current={
-                  selectedObjectId === "terrain-context" ? "true" : undefined
-                }
-                className="focus-ring flex min-h-12 items-center gap-2 px-2 text-left"
-              >
-                <Mountain className="size-4 text-terrain" aria-hidden="true" />
-                <span>
-                  <span className="block text-[13px] font-semibold">Terrain</span>
-                  <span className="block font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground">
-                    DEM contours
-                  </span>
-                </span>
-              </button>
-              <Switch
-                checked={project.map.showContours}
-                onCheckedChange={() => useEditorStore.getState().toggleContours()}
-                aria-label={`${project.map.showContours ? "Hide" : "Show"} contours`}
-                className="scale-75"
-              />
-            </li>
-            </ol>
-          </CollapsibleSection>
         </nav>
         <Separator />
         <CollapsibleSection id={`${idPrefix}travel-properties`} label="Selected properties">

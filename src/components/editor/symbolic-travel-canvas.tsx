@@ -179,6 +179,9 @@ function directionArrowheads(path: string) {
   });
 }
 
+const nepalOutlinePath =
+  "M72 398 L95 378 L123 372 L151 345 L178 332 L202 309 L229 298 L262 272 L301 282 L329 265 L366 271 L391 287 L421 308 L459 322 L498 316 L526 267 L564 244 L598 298 L633 325 L668 349 L702 337 L715 343 L705 381 L739 388 L782 380 L807 415 L828 444 L840 406 L886 432 L945 435 L984 454 L1033 455 L1077 443 L1095 605 L1075 661 L1029 655 L988 664 L943 637 L914 650 L840 628 L798 632 L739 605 L685 577 L641 524 L561 507 L488 504 L442 508 L406 492 L401 472 L382 475 L350 462 L322 442 L298 449 L264 429 L230 410 L196 373 L151 347 L124 348 L101 330 L67 303 L80 270 L98 247 L90 226 L120 173 L154 141 L174 113 L200 139 L223 132 L227 135 L242 139 L255 158 L280 154 L289 206 L262 233 L250 259 L258 268 L241 282 L245 292 L252 302 L260 309 L262 318 L254 321 L249 306 L232 301 L216 312 L189 295 L204 305 L209 310 L214 307 L218 310 L224 329 L222 339 L197 365 Z";
+
 export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const selectObject = useEditorStore((state) => state.selectObject);
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
@@ -423,17 +426,37 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
         </defs>
 
         {showMapSilhouette ? (
-          <path
-            d="M128 388 C192 315 284 340 348 290 C444 218 531 241 608 199 C706 146 812 185 882 150 C842 207 878 266 813 309 C740 356 706 432 617 452 C514 476 449 543 344 516 C260 494 197 546 116 501 C155 463 98 430 128 388Z"
-            fill="var(--canvas-fg, var(--foreground))"
-            opacity="0.055"
-            pointerEvents="none"
-          />
+          <g transform="translate(20 10) scale(0.86)" pointerEvents="none">
+            <path
+              d={nepalOutlinePath}
+              fill="var(--canvas-fg, var(--foreground))"
+              opacity="0.055"
+            />
+            <path
+              d={nepalOutlinePath}
+              fill="none"
+              stroke="var(--canvas-fg, var(--foreground))"
+              strokeWidth="2"
+              opacity="0.09"
+            />
+            <text x="86" y="642" fill="var(--canvas-fg, var(--muted-foreground))" fontSize="7" fontFamily="monospace" opacity="0.45">
+              Nepal outline adapted from Wikimedia Commons / Natural Earth
+            </text>
+          </g>
         ) : null}
 
         {showTitleBlock ? (
-          <g transform="translate(54 56)" pointerEvents="none">
-            <rect x="0" y="0" width="334" height="72" rx="10" fill="var(--canvas-muted, var(--muted))" stroke="var(--canvas-fg, var(--foreground))" opacity="0.96" />
+          <g
+            transform="translate(54 56)"
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer outline-none"
+            onClick={() => selectObject("project-title")}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") selectObject("project-title");
+            }}
+          >
+            <rect x="0" y="0" width="334" height="72" rx="10" fill="var(--canvas-muted, var(--muted))" stroke={selectedObjectId === "project-title" ? "var(--water)" : "var(--canvas-fg, var(--foreground))"} strokeWidth={selectedObjectId === "project-title" ? 2.5 : 1} opacity="0.96" />
             <rect x="0" y="0" width="5" height="72" rx="2.5" fill="var(--trail)" />
             <text x="18" y="30" fill="var(--canvas-fg, var(--foreground))" fontSize="20" fontWeight="800">{project.name}</text>
             <text x="18" y="51" fill="var(--canvas-fg, var(--muted-foreground))" fontSize="11" fontFamily="monospace" fontWeight="700">
@@ -497,7 +520,8 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           };
           const effectiveIconId = leg.iconId || (project.presentation.showModeIcons ? modeIconMap[leg.mode] : null);
           const legIconSvg = effectiveIconId ? getIconSvg(effectiveIconId, project.iconAssets) : null;
-          const sizedLegIcon = legIconSvg ? sizeIconSvg(legIconSvg, { width: 20, height: 20, color: canvasFg }) : null;
+          const legIconSize = 16 * symbolScale;
+          const sizedLegIcon = legIconSvg ? sizeIconSvg(legIconSvg, { width: legIconSize, height: legIconSize, color: canvasFg }) : null;
           const legColor = transportColor(leg.mode, leg.style.color, vividTransportColors);
           return (
             <g key={leg.id} onClick={() => selectObject(leg.id)} className="cursor-pointer">
@@ -535,8 +559,8 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
               >
                 {sizedLegIcon ? (
                   <>
-                    <rect x="-20" y="-20" width="40" height="40" rx="8" fill="transparent" stroke="transparent" />
-                    <g transform={`translate(-12 -12)`} fill="var(--canvas-fg, var(--foreground))" color="var(--canvas-fg, var(--foreground))" pointerEvents="none" dangerouslySetInnerHTML={{ __html: sizedLegIcon }} />
+                    <rect x={-legIconSize / 2 - 8} y={-legIconSize / 2 - 8} width={legIconSize + 16} height={legIconSize + 16} rx="8" fill="transparent" stroke="transparent" />
+                    <g transform={`translate(${-legIconSize / 2} ${-legIconSize / 2})`} fill="var(--canvas-fg, var(--foreground))" color="var(--canvas-fg, var(--foreground))" pointerEvents="none" dangerouslySetInnerHTML={{ __html: sizedLegIcon }} />
                   </>
                 ) : (
                   <>

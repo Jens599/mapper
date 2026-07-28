@@ -14,7 +14,6 @@ import type {
   TrailProject,
   TravelProject,
   TravelStop,
-  TravelLeg,
 } from "@/lib/project-schema";
 
 export type ScatterOptions = {
@@ -51,6 +50,8 @@ export type TravelLegUpdate = Partial<
   Pick<TravelProject["legs"][number], "name" | "from" | "to" | "mode" | "loopback" | "showDayLabel">
 >;
 
+export type ProjectMetaUpdate = Partial<Pick<TravelProject, "name" | "subtitle" | "durationDays">>;
+
 type EditorState = {
    project: MapperProject;
    travelProject: TravelProject;
@@ -63,12 +64,14 @@ type EditorState = {
    selectObject: (id: string) => void;
    selectObjects: (ids: string[]) => void;
    toggleObjectSelection: (id: string) => void;
-   clearSelection: () => void;
-   toggleObjectVisibility: (id: string) => void;
+    clearSelection: () => void;
+    deleteSelectedObjects: () => void;
+    toggleObjectVisibility: (id: string) => void;
    toggleContours: () => void;
    toggleHillshade: () => void;
    setTravelDisplay: (display: "geographic" | "symbolic") => void;
-   setMapStyle: (style: TravelProject["map"]["style"]) => void;
+    setMapStyle: (style: TravelProject["map"]["style"]) => void;
+    updateProjectMeta: (update: ProjectMetaUpdate) => void;
    addTravelStop: (stop: NewTravelStop) => void;
    addTravelLeg: (leg: NewTravelLeg) => void;
    updateTravelStop: (id: string, update: TravelStopUpdate) => void;
@@ -168,12 +171,54 @@ export const useEditorStore = create<EditorState>()(
          }
        });
      },
-     clearSelection: () => {
-       set((state) => {
-         state.selectedIds = [];
-         state.selectedObjectId = null;
-       });
-     },
+      clearSelection: () => {
+        set((state) => {
+          state.selectedIds = [];
+          state.selectedObjectId = null;
+        });
+      },
+      deleteSelectedObjects: () => {
+        set((state) => {
+          const ids = new Set(state.selectedIds.length ? state.selectedIds : state.selectedObjectId ? [state.selectedObjectId] : []);
+          ids.delete("terrain-context");
+          ids.delete("trail-terrain");
+          ids.delete("project-title");
+          if (!ids.size) return;
+
+          if (state.project.kind === "travel") {
+            const stopIds = new Set(state.project.stops.map((stop) => stop.id));
+            const deletedStops = new Set(Array.from(ids).filter((id) => stopIds.has(id)));
+            if (state.project.stops.length - deletedStops.size < 2) {
+              for (const id of deletedStops) ids.delete(id);
+              deletedStops.clear();
+            }
+            state.project.stops = state.project.stops.filter((stop) => !ids.has(stop.id));
+            state.project.legs = state.project.legs.filter(
+              (leg) => !ids.has(leg.id) && !deletedStops.has(leg.from) && !deletedStops.has(leg.to),
+            );
+            state.project.symbols = state.project.symbols.filter((symbol) => !ids.has(symbol.id));
+            state.project.scatter = state.project.scatter.filter((scatter) => !ids.has(scatter.id));
+            state.selectedObjectId = state.project.legs[0]?.id ?? state.project.stops[0]?.id ?? null;
+            state.selectedIds = state.selectedObjectId ? [state.selectedObjectId] : [];
+            return;
+          }
+
+          const waypointIds = new Set(state.project.waypoints.map((waypoint) => waypoint.id));
+          const deletedWaypoints = new Set(Array.from(ids).filter((id) => waypointIds.has(id)));
+          if (state.project.waypoints.length - deletedWaypoints.size < 2) {
+            for (const id of deletedWaypoints) ids.delete(id);
+            deletedWaypoints.clear();
+          }
+          state.project.waypoints = state.project.waypoints.filter((waypoint) => !ids.has(waypoint.id));
+          state.project.routes = state.project.routes.filter(
+            (route) => !ids.has(route.id) && route.waypointIds.every((id) => !deletedWaypoints.has(id)),
+          );
+          state.project.icons = state.project.icons.filter((icon) => !ids.has(icon.id));
+          state.project.scatter = state.project.scatter.filter((scatter) => !ids.has(scatter.id));
+          state.selectedObjectId = state.project.routes[0]?.id ?? state.project.waypoints[0]?.id ?? null;
+          state.selectedIds = state.selectedObjectId ? [state.selectedObjectId] : [];
+        });
+      },
     toggleObjectVisibility: (id) => {
       set((state) => {
         if (state.project.kind === "travel") {
@@ -241,6 +286,16 @@ export const useEditorStore = create<EditorState>()(
     setMapStyle: (style) => {
       set((state) => {
         if (state.project.kind === "travel") state.project.map.style = style;
+      });
+    },
+    updateProjectMeta: (update) => {
+      set((state) => {
+        if (state.project.kind !== "travel") return;
+        if (update.name?.trim()) state.project.name = update.name.trim().slice(0, 120);
+        if (update.subtitle !== undefined) state.project.subtitle = update.subtitle.trim().slice(0, 160);
+        if (update.durationDays !== undefined && Number.isFinite(update.durationDays)) {
+          state.project.durationDays = Math.min(9_999, Math.max(1, Math.round(update.durationDays)));
+        }
       });
     },
     addTravelStop: (stop) => {

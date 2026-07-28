@@ -336,6 +336,7 @@ export function EditorShell() {
   useEffect(() => { preloadIconsAsync(); }, []);
   const project = useEditorStore((state) => state.project);
   const selectObject = useEditorStore((state) => state.selectObject);
+  const deleteSelectedObjects = useEditorStore((state) => state.deleteSelectedObjects);
   const railRef = usePanelRef();
   const [railCollapsed, setRailCollapsed] = useState(false);
   const [desktop, setDesktop] = useState(false);
@@ -357,6 +358,24 @@ export function EditorShell() {
       else if (savedWidth >= 240 && savedWidth <= 480) railRef.current?.resize(savedWidth);
     });
   }, [desktop, railRef]);
+
+  useEffect(() => {
+    const deleteWithKeyboard = (event: KeyboardEvent) => {
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      const target = event.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) return;
+      event.preventDefault();
+      deleteSelectedObjects();
+    };
+    window.addEventListener("keydown", deleteWithKeyboard);
+    return () => window.removeEventListener("keydown", deleteWithKeyboard);
+  }, [deleteSelectedObjects]);
+
   return (
     <main className="flex h-dvh min-h-0 flex-col overflow-hidden">
       <h1 className="sr-only">Mapper travel and trail editor</h1>
