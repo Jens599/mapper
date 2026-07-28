@@ -424,33 +424,36 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
         </defs>
 
         {showMapSilhouette ? (
-          <g transform="translate(20 10) scale(0.86)" pointerEvents="none">
+          <g transform="translate(90 104) scale(0.82)" pointerEvents="none">
             <path
               d={nepalBoundary.path}
               fill="var(--canvas-fg, var(--foreground))"
-              opacity="0.055"
+              opacity="0.035"
             />
             <path
               d={nepalBoundary.path}
               fill="none"
               stroke="var(--canvas-fg, var(--foreground))"
-              strokeWidth="2"
-              opacity="0.09"
+              strokeWidth="2.4"
+              opacity="0.06"
             />
-            <text x="86" y="642" fill="var(--canvas-fg, var(--muted-foreground))" fontSize="7" fontFamily="monospace" opacity="0.45">
-              {nepalBoundary.attribution}
-            </text>
           </g>
         ) : null}
 
         {project.boundaries.filter((boundary) => boundary.visible).map((boundary, index) => (
-          <g key={boundary.id} transform={`translate(24 ${180 + index * 18}) scale(0.9)`} pointerEvents="none">
+          <g key={boundary.id} transform={`translate(90 ${126 + index * 22}) scale(0.82)`} pointerEvents="none">
             <path d={boundary.path} fill={boundary.fill} stroke={boundary.stroke} strokeWidth="1.5" opacity={boundary.opacity} />
-            <text x="18" y="350" fill="var(--canvas-fg, var(--muted-foreground))" fontSize="7" fontFamily="monospace" opacity="0.45">
-              {boundary.attribution}
-            </text>
           </g>
         ))}
+
+        {(showMapSilhouette || project.boundaries.some((boundary) => boundary.visible)) ? (
+          <g transform="translate(54 662)" pointerEvents="none">
+            <rect x="0" y="-13" width="330" height="20" rx="10" fill="var(--canvas-muted, var(--muted))" opacity="0.72" />
+            <text x="12" y="0" fill="var(--canvas-fg, var(--muted-foreground))" fontSize="7.5" fontFamily="monospace" opacity="0.72">
+              {showMapSilhouette ? nepalBoundary.attribution : project.boundaries.find((boundary) => boundary.visible)?.attribution}
+            </text>
+          </g>
+        ) : null}
 
         {showTitleBlock ? (
           <g
