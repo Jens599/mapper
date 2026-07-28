@@ -186,12 +186,15 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
   const moveSymbolicStop = useEditorStore((state) => state.moveSymbolicStop);
   const moveSymbolicSymbol = useEditorStore((state) => state.moveSymbolicSymbol);
+  const moveProjectTitle = useEditorStore((state) => state.moveProjectTitle);
   const updateLegStyle = useEditorStore((state) => state.updateLegStyle);
   const resetSymbolicLayout = useEditorStore((state) => state.resetSymbolicLayout);
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragging, setDragging] = useState<{
     id: string;
-    type: "stop" | "symbol" | "curve";
+    type: "stop" | "symbol" | "curve" | "title";
+    offsetX?: number;
+    offsetY?: number;
   } | null>(null);
   const [viewport, setViewport] = useState({ centerX: 500, centerY: 350, zoom: 1 });
   const [panning, setPanning] = useState<{
@@ -227,6 +230,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const canvasFg = foregroundFromBackground(project.map.background);
   const canvasMuted = mutedFromBackground(project.map.background);
   const boundaries = project.boundaries ?? [];
+  const titlePosition = project.presentation.titlePosition ?? { x: 54, y: 56 };
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -301,6 +305,12 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
         points.push({ x: point.x - radius, y: point.y - radius }, { x: point.x + radius, y: point.y + radius });
       }
     }
+    if (showTitleBlock) {
+      points.push(
+        { x: titlePosition.x - 20, y: titlePosition.y - 20 },
+        { x: titlePosition.x + 354, y: titlePosition.y + 92 },
+      );
+    }
     if (!points.length) {
       setViewport({ centerX: 500, centerY: 350, zoom: 1 });
       return;
@@ -316,7 +326,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
     });
   }
 
-  function pointerPosition(event: React.PointerEvent<SVGSVGElement>) {
+  function pointerPosition(event: { clientX: number; clientY: number }) {
     const svg = svgRef.current;
     const matrix = svg?.getScreenCTM();
     if (!svg || !matrix) return null;
@@ -380,7 +390,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
             moveSymbolicStop(dragging.id, { x: point.x, y: point.y });
           } else if (dragging.type === "symbol") {
             moveSymbolicSymbol(dragging.id, { x: point.x, y: point.y });
-          } else {
+          } else if (dragging.type === "curve") {
             const leg = project.legs.find((item) => item.id === dragging.id);
             const start = leg ? positions.get(leg.from) : null;
             const end = leg ? positions.get(leg.to) : null;
@@ -400,6 +410,11 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
               const curvature = ((point.x - midpoint.x) * normalX + (point.y - midpoint.y) * normalY) / bendUnit;
               updateLegStyle(leg.id, "curvature", Math.min(10, Math.max(-10, curvature)));
             }
+          } else {
+            moveProjectTitle({
+              x: point.x - (dragging.offsetX ?? 0),
+              y: point.y - (dragging.offsetY ?? 0),
+            });
           }
         }}
         onPointerUp={() => {
@@ -459,11 +474,23 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
 
         {showTitleBlock ? (
           <g
-            transform="translate(54 56)"
+            transform={`translate(${titlePosition.x} ${titlePosition.y})`}
             role="button"
             tabIndex={0}
-            className="cursor-pointer outline-none"
+            className="cursor-move outline-none"
             onClick={() => selectObject("project-title")}
+            onPointerDown={(event) => {
+              const point = pointerPosition(event);
+              event.stopPropagation();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              selectObject("project-title");
+              setDragging({
+                id: "project-title",
+                type: "title",
+                offsetX: point ? point.x - titlePosition.x : 0,
+                offsetY: point ? point.y - titlePosition.y : 0,
+              });
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") selectObject("project-title");
             }}

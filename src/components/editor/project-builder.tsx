@@ -38,7 +38,7 @@ const mapperCompletions = [
   "lineScale", "textScale", "symbolScale", "showModeIcons", "showLineHalo", "showLegend",
   "showTitleBlock", "showMapSilhouette", "showLeaderLines", "emphasizeEndpoints",
   "sequentialDayLabels", "extraArrowheads", "vividTransportColors", "fillCanvas",
-  "largerDayText", "map", "display", "style",
+  "largerDayText", "titlePosition", "map", "display", "style",
   "showContours", "showHillshade", "contourInterval", "elevationUnits", "background",
   "stops", "coordinates", "dayLabel", "icon", "elevation", "labelOffset", "labelAnchor",
   "labelStyle", "pointStyle", "fontSize", "bold", "color", "fill", "showFill", "stroke",

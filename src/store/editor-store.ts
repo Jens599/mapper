@@ -260,7 +260,7 @@ type EditorState = {
    ) => void;
     updatePresentation: (
       key: keyof PresentationSettings,
-      value: number | boolean,
+      value: PresentationSettings[keyof PresentationSettings],
     ) => void;
    resetPresentation: () => void;
    resetSymbolicLayout: () => void;
@@ -268,8 +268,9 @@ type EditorState = {
    updateStopLabelStyle: (id: string, key: keyof NonNullable<TravelStop["labelStyle"]>, value: number | string | boolean) => void;
    moveTravelStop: (id: string, coordinates: [number, number]) => void;
    moveTravelSymbol: (id: string, coordinates: [number, number]) => void;
-   moveSymbolicStop: (id: string, position: { x: number; y: number }) => void;
-   moveSymbolicSymbol: (id: string, position: { x: number; y: number }) => void;
+    moveSymbolicStop: (id: string, position: { x: number; y: number }) => void;
+    moveSymbolicSymbol: (id: string, position: { x: number; y: number }) => void;
+    moveProjectTitle: (position: { x: number; y: number }) => void;
    moveTrailObject: (id: string, position: { x: number; y: number }) => void;
    moveTravelLegControl: (legId: string, curvature: number) => void;
    setMapBackground: (color: string) => void;
@@ -830,7 +831,7 @@ export const useEditorStore = create<EditorState>()(
     },
     updatePresentation: (key, value) => {
       set((state) => {
-        (state.project.presentation as Record<string, number | boolean>)[key] = value;
+        state.project.presentation = { ...state.project.presentation, [key]: value };
       });
     },
     resetPresentation: () => {
@@ -851,6 +852,7 @@ export const useEditorStore = create<EditorState>()(
           vividTransportColors: false,
           fillCanvas: false,
           largerDayText: false,
+          titlePosition: { x: 54, y: 56 },
         };
       });
     },
@@ -859,6 +861,7 @@ export const useEditorStore = create<EditorState>()(
         if (state.project.kind !== "travel") return;
         for (const stop of state.project.stops) delete stop.diagramPosition;
         for (const symbol of state.project.symbols) delete symbol.diagramPosition;
+        state.project.presentation.titlePosition = { x: 54, y: 56 };
       });
     },
     updateStopLabelOffset: (id, axis, value) => {
@@ -907,6 +910,12 @@ export const useEditorStore = create<EditorState>()(
         if (state.project.kind !== "travel") return;
         const symbol = state.project.symbols.find((item) => item.id === id);
         if (symbol) symbol.diagramPosition = position;
+      });
+    },
+    moveProjectTitle: (position) => {
+      set((state) => {
+        if (state.project.kind !== "travel") return;
+        state.project.presentation.titlePosition = position;
       });
     },
     moveTrailObject: (id, position) => {

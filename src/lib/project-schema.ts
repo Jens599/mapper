@@ -53,6 +53,7 @@ const presentationSchema = z.object({
   vividTransportColors: z.boolean().default(false),
   fillCanvas: z.boolean().default(false),
   largerDayText: z.boolean().default(false),
+  titlePosition: z.object({ x: z.number().finite(), y: z.number().finite() }).default({ x: 54, y: 56 }),
 });
 
 export const legStyleSchema = z.object({
@@ -256,6 +257,7 @@ const travelProjectSchema = z.object({
       vividTransportColors: false,
       fillCanvas: false,
       largerDayText: false,
+      titlePosition: { x: 54, y: 56 },
     }),
     map: z.object({
       display: z.enum(["geographic", "symbolic"]).default("symbolic"),
@@ -296,6 +298,7 @@ const trailProjectSchema = z.object({
     vividTransportColors: false,
     fillCanvas: false,
     largerDayText: false,
+    titlePosition: { x: 54, y: 56 },
   }),
   canvas: z.object({
     width: z.number().positive().max(100_000),
