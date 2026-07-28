@@ -9,7 +9,6 @@ import { tags } from "@lezer/highlight";
 import { Columns2, FileCode2, Maximize2, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { usePanelRef } from "react-resizable-panels";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,11 +24,6 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable";
 import { deserializeProject, serializeProject } from "@/lib/project-io";
 import { getIconIds } from "@/lib/icons";
 import { useEditorStore } from "@/store/editor-store";
@@ -112,7 +106,7 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
   const [pending, startTransition] = useTransition();
   const [desktop, setDesktop] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
-  const editorPanelRef = usePanelRef();
+  const [builderWidth, setBuilderWidth] = useState(760);
   const userEdited = useRef(false);
 
   useEffect(() => {
@@ -140,12 +134,26 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
 
   function showHalfScreen() {
     setFullscreen(false);
-    requestAnimationFrame(() => editorPanelRef.current?.resize(50));
+    setBuilderWidth(Math.round(window.innerWidth * 0.5));
   }
 
   function showFullScreen() {
     setFullscreen(true);
-    requestAnimationFrame(() => editorPanelRef.current?.resize(100));
+  }
+
+  function startResize(event: React.PointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const move = (pointerEvent: PointerEvent) => {
+      const minWidth = Math.min(560, window.innerWidth - 32);
+      const maxWidth = window.innerWidth - 32;
+      setBuilderWidth(Math.min(maxWidth, Math.max(minWidth, window.innerWidth - pointerEvent.clientX)));
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
   }
 
   function applySource() {
@@ -282,19 +290,26 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
               {workspace}
             </div>
           ) : (
-            <ResizablePanelGroup orientation="horizontal" className="size-full">
-              <ResizablePanel defaultSize={50} minSize={0} className="bg-black/35" />
-              <ResizableHandle withHandle className="bg-[#454545]" onDoubleClick={showHalfScreen} />
-              <ResizablePanel
-                panelRef={editorPanelRef}
-                defaultSize={50}
-                minSize={36}
-                maxSize={85}
-                className="min-w-[44rem] shadow-[-10px_0_30px_rgba(0,0,0,0.35)]"
+            <div className="flex size-full">
+              <div className="min-w-0 flex-1 bg-black/35" />
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize Builder"
+                tabIndex={0}
+                onPointerDown={startResize}
+                onDoubleClick={showHalfScreen}
+                className="group relative z-10 flex w-2 cursor-col-resize items-center justify-center bg-[#343434] outline-none focus-visible:ring-2 focus-visible:ring-[#007acc]"
+              >
+                <span className="h-10 w-1 rounded-full bg-[#6a6a6a] transition-colors group-hover:bg-[#9a9a9a]" />
+              </div>
+              <section
+                className="min-w-0 shadow-[-10px_0_30px_rgba(0,0,0,0.35)]"
+                style={{ width: builderWidth, maxWidth: "calc(100vw - 2rem)", minWidth: "min(35rem, calc(100vw - 2rem))" }}
               >
                 {workspace}
-              </ResizablePanel>
-            </ResizablePanelGroup>
+              </section>
+            </div>
           )}
         </DialogContent>
       </Dialog>
