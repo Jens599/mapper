@@ -46,7 +46,8 @@ const mapperCompletions = [
   "largerDayText", "map", "display", "style",
   "showContours", "showHillshade", "contourInterval", "elevationUnits", "background",
   "stops", "coordinates", "dayLabel", "icon", "elevation", "labelOffset", "labelAnchor",
-  "labelStyle", "fontSize", "bold", "color", "legs", "from",
+  "labelStyle", "pointStyle", "fontSize", "bold", "color", "fill", "showFill", "stroke",
+  "showStroke", "strokeWidth", "diagramPosition", "x", "y", "legs", "from",
   "to", "mode", "loopback", "showDayLabel", "iconId", "via", "corridor", "corridorNoise", "page",
   "line", "solid", "dashed", "dotted", "curvature", "winding",
   "noiseSeed", "noiseAmplitude", "noiseScale", "noiseOctaves", "noiseModulation",
@@ -55,6 +56,7 @@ const mapperCompletions = [
   "type", "trip-bounds", "map-edge", "north", "south", "east", "west",
   "around-stop", "stopId", "along-leg", "legId", "bounds",
   "padding", "radius", "appearance", "scale", "rotation",
+  "boundaries", "source", "attribution", "viewBox", "path", "opacity",
   "canvas", "canvas-edge", "top", "bottom", "left", "right", "around-waypoint",
   "waypointId", "along-route", "routeId", "rectangle",
   "waypoints", "routes", "terrain", "icons", "visible",
@@ -138,12 +140,12 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
 
   function showHalfScreen() {
     setFullscreen(false);
-    requestAnimationFrame(() => editorPanelRef.current?.resize("50%"));
+    requestAnimationFrame(() => editorPanelRef.current?.resize(50));
   }
 
   function showFullScreen() {
     setFullscreen(true);
-    requestAnimationFrame(() => editorPanelRef.current?.resize("100%"));
+    requestAnimationFrame(() => editorPanelRef.current?.resize(100));
   }
 
   function applySource() {
@@ -156,6 +158,15 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
       });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The YAML project is invalid.");
+    }
+  }
+
+  function getProjectError(value: string) {
+    try {
+      deserializeProject(value);
+      return null;
+    } catch (reason) {
+      return reason instanceof Error ? reason.message : "Project YAML is invalid";
     }
   }
 
@@ -207,17 +218,18 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
               autocompletion({ override: [iconValueCompletionSource, mapperCompletionSource] }),
               linter((view) => {
                 try {
-                  deserializeProject(view.state.doc.toString());
-                  return [];
-                } catch {
+                  const message = getProjectError(view.state.doc.toString());
+                  if (!message) return [];
                   return [
                     {
                       from: 0,
                       to: view.state.doc.length,
                       severity: "error",
-                      message: "Project YAML is invalid",
+                      message,
                     },
                   ];
+                } catch {
+                  return [];
                 }
               }, { delay: 400 }),
               EditorView.lineWrapping,
@@ -260,19 +272,19 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
         <DialogContent
           showCloseButton={false}
           className={fullscreen
-            ? "inset-0 size-full max-w-none translate-x-0 translate-y-0 rounded-none bg-transparent p-0 ring-0"
-            : "inset-0 bottom-0 left-0 top-0 h-full w-full max-w-none translate-x-0 translate-y-0 rounded-none bg-transparent p-0 ring-0"}
+            ? "!inset-0 !left-0 !top-0 size-full max-w-none !translate-x-0 !translate-y-0 rounded-none bg-transparent p-0 ring-0"
+            : "!inset-0 !left-0 !top-0 h-full w-full max-w-none !translate-x-0 !translate-y-0 rounded-none bg-transparent p-0 ring-0"}
         >
           <DialogTitle className="sr-only">Project builder</DialogTitle>
           <DialogDescription className="sr-only">Edit and validate the active project YAML.</DialogDescription>
           <ResizablePanelGroup orientation="horizontal" className="size-full">
-            <ResizablePanel defaultSize="50%" minSize="0%" className="bg-black/40" />
+            <ResizablePanel defaultSize={fullscreen ? 0 : 50} minSize={0} className="bg-black/40" />
             <ResizableHandle withHandle className="bg-[#454545]" onDoubleClick={showHalfScreen} />
             <ResizablePanel
               panelRef={editorPanelRef}
-              defaultSize="50%"
-              minSize="30%"
-              maxSize="80%"
+              defaultSize={fullscreen ? 100 : 50}
+              minSize={30}
+              maxSize={fullscreen ? 100 : 80}
               className="shadow-[-10px_0_30px_rgba(0,0,0,0.35)]"
             >
               {workspace}
