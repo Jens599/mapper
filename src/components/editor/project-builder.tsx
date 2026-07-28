@@ -74,8 +74,9 @@ function mapperCompletionSource(context: CompletionContext) {
 
 const vscodeTheme = EditorView.theme(
   {
-    "&": { backgroundColor: "#1e1e1e", color: "#d4d4d4", fontSize: "13px" },
+    "&": { backgroundColor: "#1e1e1e", color: "#d4d4d4", fontSize: "13px", height: "100%" },
     ".cm-content": { caretColor: "#aeafad", fontFamily: "var(--font-plex-mono), monospace" },
+    ".cm-scroller": { overflow: "auto" },
     ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#aeafad" },
     ".cm-gutters": { backgroundColor: "#1e1e1e", color: "#858585", border: "none" },
     ".cm-activeLine": { backgroundColor: "#2a2d2e" },
@@ -304,7 +305,7 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
                 <span className="h-10 w-1 rounded-full bg-[#6a6a6a] transition-colors group-hover:bg-[#9a9a9a]" />
               </div>
               <section
-                className="min-w-0 shadow-[-10px_0_30px_rgba(0,0,0,0.35)]"
+                className="h-full min-w-0 shadow-[-10px_0_30px_rgba(0,0,0,0.35)]"
                 style={{ width: builderWidth, maxWidth: "calc(100vw - 2rem)", minWidth: "min(35rem, calc(100vw - 2rem))" }}
               >
                 {workspace}
