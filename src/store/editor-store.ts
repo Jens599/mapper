@@ -52,13 +52,121 @@ export type TravelLegUpdate = Partial<
 
 export type ProjectMetaUpdate = Partial<Pick<TravelProject, "name" | "subtitle" | "durationDays">>;
 
+type FormatClipboard =
+  | {
+      kind: "travel-stop";
+      icon: TravelProject["stops"][number]["icon"];
+      labelAnchor: TravelProject["stops"][number]["labelAnchor"];
+      labelStyle: TravelProject["stops"][number]["labelStyle"];
+      pointStyle: TravelProject["stops"][number]["pointStyle"];
+    }
+  | {
+      kind: "travel-leg";
+      showDayLabel: TravelProject["legs"][number]["showDayLabel"];
+      iconId: TravelProject["legs"][number]["iconId"];
+      style: TravelProject["legs"][number]["style"];
+    }
+  | {
+      kind: "travel-symbol";
+      iconId: TravelProject["symbols"][number]["iconId"];
+      scale: TravelProject["symbols"][number]["scale"];
+      rotation: TravelProject["symbols"][number]["rotation"];
+    }
+  | {
+      kind: "travel-scatter";
+      iconId: TravelProject["scatter"][number]["iconId"];
+      appearance: TravelProject["scatter"][number]["appearance"];
+    };
+
+function cloneFormat<T>(value: T): T {
+  return structuredClone(value);
+}
+
+function readFormat(project: MapperProject, id: string | null): FormatClipboard | null {
+  if (project.kind !== "travel" || !id) return null;
+  const stop = project.stops.find((item) => item.id === id);
+  if (stop) {
+    return {
+      kind: "travel-stop",
+      icon: stop.icon,
+      labelAnchor: stop.labelAnchor,
+      labelStyle: cloneFormat(stop.labelStyle),
+      pointStyle: cloneFormat(stop.pointStyle),
+    };
+  }
+  const leg = project.legs.find((item) => item.id === id);
+  if (leg) {
+    return {
+      kind: "travel-leg",
+      showDayLabel: leg.showDayLabel,
+      iconId: leg.iconId,
+      style: cloneFormat(leg.style),
+    };
+  }
+  const symbol = project.symbols.find((item) => item.id === id);
+  if (symbol) {
+    return {
+      kind: "travel-symbol",
+      iconId: symbol.iconId,
+      scale: symbol.scale,
+      rotation: symbol.rotation,
+    };
+  }
+  const scatter = project.scatter.find((item) => item.id === id);
+  if (scatter) {
+    return {
+      kind: "travel-scatter",
+      iconId: scatter.iconId,
+      appearance: cloneFormat(scatter.appearance),
+    };
+  }
+  return null;
+}
+
+function applyFormat(state: { project: MapperProject; formatClipboard: FormatClipboard | null }, id: string) {
+  if (state.project.kind !== "travel" || !state.formatClipboard) return false;
+  const format = state.formatClipboard;
+  if (format.kind === "travel-stop") {
+    const stop = state.project.stops.find((item) => item.id === id);
+    if (!stop) return false;
+    stop.icon = format.icon;
+    stop.labelAnchor = format.labelAnchor;
+    stop.labelStyle = cloneFormat(format.labelStyle);
+    stop.pointStyle = cloneFormat(format.pointStyle);
+    return true;
+  }
+  if (format.kind === "travel-leg") {
+    const leg = state.project.legs.find((item) => item.id === id);
+    if (!leg) return false;
+    leg.showDayLabel = format.showDayLabel;
+    leg.iconId = format.iconId;
+    leg.style = cloneFormat(format.style);
+    return true;
+  }
+  if (format.kind === "travel-symbol") {
+    const symbol = state.project.symbols.find((item) => item.id === id);
+    if (!symbol) return false;
+    symbol.iconId = format.iconId;
+    symbol.scale = format.scale;
+    symbol.rotation = format.rotation;
+    return true;
+  }
+  const scatter = state.project.scatter.find((item) => item.id === id);
+  if (!scatter) return false;
+  scatter.iconId = format.iconId;
+  scatter.appearance = cloneFormat(format.appearance);
+  return true;
+}
+
 type EditorState = {
    project: MapperProject;
    travelProject: TravelProject;
    trailProject: TrailProject;
-   selectedObjectId: string | null;
-   selectedIds: string[];
-   selectedIconId: string;
+    selectedObjectId: string | null;
+    selectedIds: string[];
+    selectedIconId: string;
+    formatClipboard: FormatClipboard | null;
+    formatPainterActive: boolean;
    switchProjectMode: (kind: MapperProject["kind"]) => void;
    replaceProject: (project: MapperProject) => void;
    selectObject: (id: string) => void;
@@ -72,6 +180,9 @@ type EditorState = {
    setTravelDisplay: (display: "geographic" | "symbolic") => void;
     setMapStyle: (style: TravelProject["map"]["style"]) => void;
     updateProjectMeta: (update: ProjectMetaUpdate) => void;
+    copySelectedFormat: () => void;
+    applyFormatToObject: (id: string) => boolean;
+    cancelFormatPainter: () => void;
    addTravelStop: (stop: NewTravelStop) => void;
    addTravelLeg: (leg: NewTravelLeg) => void;
    updateTravelStop: (id: string, update: TravelStopUpdate) => void;
@@ -121,9 +232,11 @@ export const useEditorStore = create<EditorState>()(
      project: sampleProject,
      travelProject: sampleProject,
      trailProject: sampleTrailProject,
-     selectedObjectId: "leg-kathmandu-pokhara",
-     selectedIds: [],
-     selectedIconId: "carbon-mountain",
+      selectedObjectId: "leg-kathmandu-pokhara",
+      selectedIds: [],
+      selectedIconId: "carbon-mountain",
+      formatClipboard: null,
+      formatPainterActive: false,
      switchProjectMode: (kind) => {
        set((state) => {
          if (state.project.kind === kind) return;
@@ -147,12 +260,15 @@ export const useEditorStore = create<EditorState>()(
          state.selectedIds = [];
        });
      },
-     selectObject: (id) => {
-       set((state) => {
-         state.selectedObjectId = id;
-         state.selectedIds = [id];
-       });
-     },
+      selectObject: (id) => {
+        set((state) => {
+          if (state.formatPainterActive && applyFormat(state, id)) {
+            state.formatPainterActive = false;
+          }
+          state.selectedObjectId = id;
+          state.selectedIds = [id];
+        });
+      },
      selectObjects: (ids) => {
        set((state) => {
          state.selectedIds = ids;
@@ -296,6 +412,31 @@ export const useEditorStore = create<EditorState>()(
         if (update.durationDays !== undefined && Number.isFinite(update.durationDays)) {
           state.project.durationDays = Math.min(9_999, Math.max(1, Math.round(update.durationDays)));
         }
+      });
+    },
+    copySelectedFormat: () => {
+      set((state) => {
+        const format = readFormat(state.project, state.selectedObjectId);
+        if (!format) return;
+        state.formatClipboard = format;
+        state.formatPainterActive = true;
+      });
+    },
+    applyFormatToObject: (id) => {
+      let applied = false;
+      set((state) => {
+        applied = applyFormat(state, id);
+        if (applied) {
+          state.formatPainterActive = false;
+          state.selectedObjectId = id;
+          state.selectedIds = [id];
+        }
+      });
+      return applied;
+    },
+    cancelFormatPainter: () => {
+      set((state) => {
+        state.formatPainterActive = false;
       });
     },
     addTravelStop: (stop) => {

@@ -8,6 +8,7 @@ import {
   MapPinned,
   MapPin,
   Mountain,
+  Paintbrush,
   PanelLeftClose,
   Pencil,
   Plane,
@@ -15,6 +16,7 @@ import {
   Ship,
   TrainFront,
   Trash2,
+  X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -195,7 +197,9 @@ function ObjectRow({
           size="icon-sm"
           aria-label={`Delete ${name}`}
           onClick={() => {
-            useEditorStore.getState().selectObject(id);
+            const store = useEditorStore.getState();
+            store.cancelFormatPainter();
+            store.selectObject(id);
             deleteSelectedObjects();
           }}
         >
@@ -837,42 +841,93 @@ function SymbolProperties({
   );
 }
 
+function FormatPainterControls() {
+  const project = useEditorStore((state) => state.project);
+  const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
+  const formatClipboard = useEditorStore((state) => state.formatClipboard);
+  const formatPainterActive = useEditorStore((state) => state.formatPainterActive);
+  const copySelectedFormat = useEditorStore((state) => state.copySelectedFormat);
+  const cancelFormatPainter = useEditorStore((state) => state.cancelFormatPainter);
+
+  if (project.kind !== "travel") return null;
+
+  const canCopy = Boolean(
+    selectedObjectId &&
+      (project.stops.some((item) => item.id === selectedObjectId) ||
+        project.legs.some((item) => item.id === selectedObjectId) ||
+        project.symbols.some((item) => item.id === selectedObjectId) ||
+        project.scatter.some((item) => item.id === selectedObjectId)),
+  );
+  const copiedLabel = formatClipboard
+    ? formatClipboard.kind.replace("travel-", "")
+    : "nothing";
+
+  return (
+    <div className="grid gap-2 border-b border-sidebar-border bg-sidebar-accent/20 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+            Format painter
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {formatPainterActive ? `Click a ${copiedLabel} to apply.` : "Copy styling, then click a matching target."}
+          </p>
+        </div>
+        {formatPainterActive ? (
+          <Button variant="ghost" size="icon-sm" aria-label="Cancel format painter" onClick={cancelFormatPainter}>
+            <X aria-hidden="true" />
+          </Button>
+        ) : null}
+      </div>
+      <Button variant={formatPainterActive ? "default" : "outline"} size="sm" disabled={!canCopy} onClick={copySelectedFormat}>
+        <Paintbrush aria-hidden="true" /> Copy format
+      </Button>
+    </div>
+  );
+}
+
 function SelectedProperties({ idPrefix }: { idPrefix: string }) {
   const project = useEditorStore((state) => state.project);
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
   if (project.kind !== "travel") return null;
 
   if (selectedObjectId === "terrain-context") {
-    return <TerrainProperties idPrefix={idPrefix} />;
+    return <><FormatPainterControls /><TerrainProperties idPrefix={idPrefix} /></>;
   }
 
   if (selectedObjectId === "project-title") {
-    return <ProjectTitleProperties idPrefix={idPrefix} />;
+    return <><FormatPainterControls /><ProjectTitleProperties idPrefix={idPrefix} /></>;
   }
 
   const stop = project.stops.find((item) => item.id === selectedObjectId);
-  if (stop) return <StopProperties stop={stop} idPrefix={idPrefix} />;
+  if (stop) return <><FormatPainterControls /><StopProperties stop={stop} idPrefix={idPrefix} /></>;
 
   const leg = project.legs.find((item) => item.id === selectedObjectId);
   if (leg) {
     return (
-      <LegProperties
-        leg={leg}
-        idPrefix={idPrefix}
-        stops={project.stops}
-      />
+      <>
+        <FormatPainterControls />
+        <LegProperties
+          leg={leg}
+          idPrefix={idPrefix}
+          stops={project.stops}
+        />
+      </>
     );
   }
 
   const symbol = project.symbols.find((item) => item.id === selectedObjectId);
-  if (symbol) return <SymbolProperties symbol={symbol} idPrefix={idPrefix} />;
+  if (symbol) return <><FormatPainterControls /><SymbolProperties symbol={symbol} idPrefix={idPrefix} /></>;
   const scatter = project.scatter.find((item) => item.id === selectedObjectId);
-  if (scatter) return <ScatterProperties scatter={scatter} idPrefix={idPrefix} />;
+  if (scatter) return <><FormatPainterControls /><ScatterProperties scatter={scatter} idPrefix={idPrefix} /></>;
 
   return (
-    <p className="p-4 text-sm text-muted-foreground">
-      Select a stop, travel leg, or terrain layer to edit it.
-    </p>
+    <>
+      <FormatPainterControls />
+      <p className="p-4 text-sm text-muted-foreground">
+        Select a stop, travel leg, or terrain layer to edit it.
+      </p>
+    </>
   );
 }
 
