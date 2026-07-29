@@ -230,6 +230,7 @@ type EditorState = {
     updateProjectMeta: (update: ProjectMetaUpdate) => void;
     copySelectedFormat: (shiftHeld?: boolean) => void;
     applyFormatToObject: (id: string) => boolean;
+    armShiftFormatPainter: () => void;
     cancelFormatPainter: () => void;
     cancelShiftFormatPainter: () => void;
    addTravelStop: (stop: NewTravelStop) => void;
@@ -517,6 +518,12 @@ export const useEditorStore = create<EditorState>()(
         }
       });
       return applied;
+    },
+    armShiftFormatPainter: () => {
+      set((state) => {
+        if (!state.formatPainterActive) return;
+        state.formatPainterShiftHeld = true;
+      });
     },
     cancelFormatPainter: () => {
       set((state) => {

@@ -1016,16 +1016,26 @@ function FormatPainterControls() {
   const formatClipboard = useEditorStore((state) => state.formatClipboard);
   const formatPainterActive = useEditorStore((state) => state.formatPainterActive);
   const copySelectedFormat = useEditorStore((state) => state.copySelectedFormat);
+  const armShiftFormatPainter = useEditorStore((state) => state.armShiftFormatPainter);
   const cancelFormatPainter = useEditorStore((state) => state.cancelFormatPainter);
   const cancelShiftFormatPainter = useEditorStore((state) => state.cancelShiftFormatPainter);
 
   useEffect(() => {
+    function startShiftPainter(event: KeyboardEvent) {
+      if (event.key === "Shift") armShiftFormatPainter();
+    }
     function stopShiftPainter(event: KeyboardEvent) {
       if (event.key === "Shift") cancelShiftFormatPainter();
     }
+    window.addEventListener("keydown", startShiftPainter);
     window.addEventListener("keyup", stopShiftPainter);
-    return () => window.removeEventListener("keyup", stopShiftPainter);
-  }, [cancelShiftFormatPainter]);
+    window.addEventListener("blur", cancelShiftFormatPainter);
+    return () => {
+      window.removeEventListener("keydown", startShiftPainter);
+      window.removeEventListener("keyup", stopShiftPainter);
+      window.removeEventListener("blur", cancelShiftFormatPainter);
+    };
+  }, [armShiftFormatPainter, cancelShiftFormatPainter]);
 
   if (project.kind !== "travel") return null;
 
