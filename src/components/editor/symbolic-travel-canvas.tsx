@@ -182,6 +182,7 @@ function directionArrowheads(path: string) {
 }
 
 type Bounds = { left: number; right: number; top: number; bottom: number };
+type RouteRenderPath = { path: string; modeX: number; modeY: number; arrowLabelX: number; arrowLabelY: number };
 
 function boundsFromPoints(points: Array<{ x: number; y: number }>): Bounds | null {
   if (!points.length) return null;
@@ -429,7 +430,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
     if (alignedOnLoadKey.current === alignmentKey) return;
     alignedOnLoadKey.current = alignmentKey;
     for (const stop of project.stops.filter((item) => item.visible)) moveLabelToLeastCoveredArea(stop.id);
-  }, [project.id]);
+  }, [project]);
 
   function changeZoom(nextZoom: number) {
     setViewport((current) => ({
@@ -681,24 +682,33 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           const start = positions.get(leg.from);
           const end = positions.get(leg.to);
           if (!start || !end) return null;
-          let paths: string[];
-          let modeX: number;
-          let modeY: number;
+          let paths: RouteRenderPath[];
           let arrowLabelX: number;
           let arrowLabelY: number;
           if (leg.loopback && leg.from === leg.to) {
             const loop = buildSymbolicLoopPath(start, leg.style);
-            paths = [loop.path];
-            modeX = loop.modeX;
-            modeY = loop.modeY;
+            paths = [{ path: loop.path, modeX: loop.modeX, modeY: loop.modeY, arrowLabelX: loop.arrowX, arrowLabelY: loop.arrowY }];
             arrowLabelX = loop.arrowX;
             arrowLabelY = loop.arrowY;
           } else {
             const outbound = buildRoutePathInfo(start, end, leg.style, 1);
             const returnPath = leg.loopback ? buildRoutePathInfo(end, start, leg.style, 1) : null;
-            paths = returnPath ? [outbound.path, returnPath.path] : [outbound.path];
-            modeX = outbound.modeX + (index % 2) * outbound.normalX * 12;
-            modeY = outbound.modeY + (index % 2) * outbound.normalY * 12;
+            paths = [
+              {
+                path: outbound.path,
+                modeX: outbound.modeX + (index % 2) * outbound.normalX * 12,
+                modeY: outbound.modeY + (index % 2) * outbound.normalY * 12,
+                arrowLabelX: outbound.arrowLabelX,
+                arrowLabelY: outbound.arrowLabelY,
+              },
+              ...(returnPath ? [{
+                path: returnPath.path,
+                modeX: returnPath.modeX - (index % 2) * outbound.normalX * 12,
+                modeY: returnPath.modeY - (index % 2) * outbound.normalY * 12,
+                arrowLabelX: returnPath.arrowLabelX,
+                arrowLabelY: returnPath.arrowLabelY,
+              }] : []),
+            ];
             arrowLabelX = outbound.arrowLabelX;
             arrowLabelY = outbound.arrowLabelY;
           }
@@ -722,11 +732,11 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           const modePillHeight = Math.max(20, modeFontSize + 10);
           return (
             <g key={leg.id} onClick={() => selectObject(leg.id)} onDoubleClick={() => requestObjectEdit(leg.id)} className="cursor-pointer">
-              {paths.map((path, pathIndex) => showLineHalo ? <path key={`${leg.id}-halo-${pathIndex}`} d={path} fill="none" stroke={lineHaloColor ?? "#ffffff"} strokeWidth={10 * lineScale} strokeLinecap="round" /> : null)}
-              {paths.map((path, pathIndex) => (
+              {paths.map((route, pathIndex) => showLineHalo ? <path key={`${leg.id}-halo-${pathIndex}`} d={route.path} fill="none" stroke={lineHaloColor ?? "#ffffff"} strokeWidth={10 * lineScale} strokeLinecap="round" /> : null)}
+              {paths.map((route, pathIndex) => (
                 <path
                   key={`${leg.id}-route-${pathIndex}`}
-                  d={path}
+                  d={route.path}
                   fill="none"
                   stroke={legColor}
                   strokeWidth={(selectedObjectId === leg.id ? 5 : 3) * lineScale}
@@ -735,7 +745,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
                   markerEnd={showLegArrowhead ? "url(#symbolic-arrow-strong)" : undefined}
                 />
               ))}
-              {extraArrowheads && showLegArrowhead ? paths.flatMap((path, pathIndex) => directionArrowheads(path).map((arrow, arrowIndex) => (
+              {extraArrowheads && showLegArrowhead ? paths.flatMap((route, pathIndex) => directionArrowheads(route.path).map((arrow, arrowIndex) => (
                 <path
                   key={`${leg.id}-arrow-${pathIndex}-${arrowIndex}`}
                   d={`M${arrow.start.x} ${arrow.start.y} L${arrow.end.x} ${arrow.end.y}`}
@@ -747,30 +757,33 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
                   pointerEvents="none"
                 />
               ))) : null}
-              <g
-                transform={`translate(${modeX} ${modeY})`}
-                className="cursor-move"
-                onPointerDown={(event) => {
-                  event.stopPropagation();
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                  setDragging({ id: leg.id, type: "curve" });
-                  selectObject(leg.id);
-                }}
-              >
-                {sizedLegIcon ? (
-                  <>
-                    <rect x={-legIconSize / 2 - 8} y={-legIconSize / 2 - 8} width={legIconSize + 16} height={legIconSize + 16} rx="8" fill="transparent" stroke="transparent" />
-                    <g transform={`translate(${-legIconSize / 2} ${-legIconSize / 2})`} fill="var(--canvas-fg, var(--foreground))" color="var(--canvas-fg, var(--foreground))" pointerEvents="none" dangerouslySetInnerHTML={{ __html: sizedLegIcon }} />
-                  </>
-                ) : (
-                  <>
-                    <rect x={-modePillWidth / 2} y={-modePillHeight / 2} width={modePillWidth} height={modePillHeight} rx={modePillHeight / 2} fill="var(--canvas-muted, var(--muted))" stroke={legColor} />
-                    <text textAnchor="middle" y={modeFontSize * 0.35} fill="var(--canvas-fg, var(--foreground))" fontSize={modeFontSize} fontFamily="monospace" fontWeight="700">
-                      {modeLabel}
-                    </text>
-                  </>
-                )}
-              </g>
+              {paths.map((route, pathIndex) => (
+                <g
+                  key={`${leg.id}-mode-${pathIndex}`}
+                  transform={`translate(${route.modeX} ${route.modeY})`}
+                  className="cursor-move"
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    setDragging({ id: leg.id, type: "curve" });
+                    selectObject(leg.id);
+                  }}
+                >
+                  {sizedLegIcon ? (
+                    <>
+                      <rect x={-legIconSize / 2 - 8} y={-legIconSize / 2 - 8} width={legIconSize + 16} height={legIconSize + 16} rx="8" fill="transparent" stroke="transparent" />
+                      <g transform={`translate(${-legIconSize / 2} ${-legIconSize / 2})`} fill="var(--canvas-fg, var(--foreground))" color="var(--canvas-fg, var(--foreground))" pointerEvents="none" dangerouslySetInnerHTML={{ __html: sizedLegIcon }} />
+                    </>
+                  ) : (
+                    <>
+                      <rect x={-modePillWidth / 2} y={-modePillHeight / 2} width={modePillWidth} height={modePillHeight} rx={modePillHeight / 2} fill="var(--canvas-muted, var(--muted))" stroke={legColor} />
+                      <text textAnchor="middle" y={modeFontSize * 0.35} fill="var(--canvas-fg, var(--foreground))" fontSize={modeFontSize} fontFamily="monospace" fontWeight="700">
+                        {modeLabel}
+                      </text>
+                    </>
+                  )}
+                </g>
+              ))}
               {leg.showDayLabel && destinationDay ? (
                 <g transform={`translate(${arrowLabelX} ${arrowLabelY})`} pointerEvents="none">
                   <rect x="-25" y="-9" width="50" height="16" rx="8" fill="var(--muted)" stroke={legColor} />

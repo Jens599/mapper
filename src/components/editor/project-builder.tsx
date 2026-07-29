@@ -1,7 +1,8 @@
 "use client";
 
-import Editor, { type OnMount } from "@monaco-editor/react";
 import { Columns2, FileCode2, Maximize2, X } from "lucide-react";
+import dynamic from "next/dynamic";
+import type { OnMount } from "@monaco-editor/react";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,15 @@ import { deserializeProject, serializeProject } from "@/lib/project-io";
 import { configureMapperMonaco } from "@/lib/monaco-setup";
 import { useEditorStore } from "@/store/editor-store";
 
+const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex size-full items-center justify-center bg-[#1e1e1e] font-mono text-xs text-[#9d9d9d]">
+      Loading YAML editor...
+    </div>
+  ),
+});
+
 export function ProjectBuilder({ children }: { children: React.ReactNode }) {
   const project = useEditorStore((state) => state.project);
   const replaceProject = useEditorStore((state) => state.replaceProject);
@@ -33,6 +43,8 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
   const [fullscreen, setFullscreen] = useState(false);
   const [builderWidth, setBuilderWidth] = useState(760);
   const [editorHeight, setEditorHeight] = useState(480);
+  const [plainEditor, setPlainEditor] = useState(false);
+  const [monacoReady, setMonacoReady] = useState(false);
   const editorBodyRef = useRef<HTMLDivElement>(null);
   const userEdited = useRef(false);
 
@@ -40,6 +52,8 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
     if (open) {
       setSource(serializeProject(project));
       userEdited.current = false;
+      setPlainEditor(false);
+      setMonacoReady(false);
     } else {
       userEdited.current = false;
     }
@@ -74,6 +88,12 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
       window.removeEventListener("resize", update);
     };
   }, [open, desktop, fullscreen, builderWidth]);
+
+  useEffect(() => {
+    if (!open || plainEditor || monacoReady) return;
+    const timeout = window.setTimeout(() => setPlainEditor(true), 4_000);
+    return () => window.clearTimeout(timeout);
+  }, [open, plainEditor, monacoReady]);
 
   function showHalfScreen() {
     setFullscreen(false);
@@ -128,6 +148,7 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
 
   const handleEditorMount = useCallback<OnMount>((editor, monaco) => {
     configureMapperMonaco(monaco);
+    setMonacoReady(true);
     editor.layout();
   }, []);
 
@@ -164,37 +185,47 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <div ref={editorBodyRef} className="min-h-0 flex-1 overflow-hidden bg-[#1e1e1e]">
-          <Editor
-            value={source}
-            height={`${editorHeight}px`}
-            language="yaml"
-            path={`${project.id}.mapper.yaml`}
-            theme="mapper-dark"
-            beforeMount={configureMapperMonaco}
-            onMount={handleEditorMount}
-            onChange={(value) => onChange(value ?? "")}
-            options={{
-              automaticLayout: true,
-              fontFamily: "var(--font-plex-mono), Consolas, monospace",
-              fontSize: 13,
-              lineNumbers: "on",
-              minimap: { enabled: false },
-              scrollBeyondLastLine: false,
-              smoothScrolling: true,
-              tabSize: 2,
-              insertSpaces: true,
-              wordWrap: "off",
-              wrappingIndent: "none",
-              scrollbar: {
-                vertical: "visible",
-                horizontal: "visible",
-                useShadows: false,
-              },
-              overviewRulerLanes: 0,
-              renderLineHighlight: "line",
-              fixedOverflowWidgets: true,
-            }}
-          />
+          {plainEditor ? (
+            <textarea
+              value={source}
+              onChange={(event) => onChange(event.currentTarget.value)}
+              spellCheck={false}
+              className="size-full resize-none bg-[#1e1e1e] p-4 font-mono text-[13px] leading-5 text-[#d4d4d4] outline-none selection:bg-[#264f78]"
+              aria-label="Project YAML source"
+            />
+          ) : (
+            <MonacoEditor
+              value={source}
+              height={`${editorHeight}px`}
+              language="yaml"
+              path={`${project.id}.mapper.yaml`}
+              theme="mapper-dark"
+              beforeMount={configureMapperMonaco}
+              onMount={handleEditorMount}
+              onChange={(value) => onChange(value ?? "")}
+              options={{
+                automaticLayout: true,
+                fontFamily: "var(--font-plex-mono), Consolas, monospace",
+                fontSize: 13,
+                lineNumbers: "on",
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                smoothScrolling: true,
+                tabSize: 2,
+                insertSpaces: true,
+                wordWrap: "off",
+                wrappingIndent: "none",
+                scrollbar: {
+                  vertical: "visible",
+                  horizontal: "visible",
+                  useShadows: false,
+                },
+                overviewRulerLanes: 0,
+                renderLineHighlight: "line",
+                fixedOverflowWidgets: true,
+              }}
+            />
+          )}
         </div>
         {error ? (
           <p role="alert" className="border-t border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive">
@@ -203,7 +234,9 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
         ) : null}
         <div className="flex h-6 shrink-0 items-center justify-between bg-[#007acc] px-3 font-mono text-[10px] text-white">
           <span>Mapper YAML</span>
-          <span>YAML | UTF-8 | Spaces: 2</span>
+          <button type="button" className="underline-offset-2 hover:underline" onClick={() => setPlainEditor((current) => !current)}>
+            {plainEditor ? "Plain text" : "Monaco"} | UTF-8 | Spaces: 2
+          </button>
         </div>
         <div className="relative z-10 flex shrink-0 justify-end gap-2 border-t border-[#2b2b2b] bg-[#181818] p-3 shadow-[0_-8px_20px_rgba(0,0,0,0.25)]">
           <Button variant="ghost" className="text-[#d4d4d4] hover:bg-[#2a2d2e] hover:text-white" onClick={() => setOpen(false)}>
