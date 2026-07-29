@@ -27,7 +27,7 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
   loading: () => (
     <div className="flex size-full items-center justify-center bg-[#1e1e1e] font-mono text-xs text-[#9d9d9d]">
-      Loading YAML editor...
+      Loading Monaco...
     </div>
   ),
 });
@@ -43,7 +43,7 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
   const [fullscreen, setFullscreen] = useState(false);
   const [builderWidth, setBuilderWidth] = useState(760);
   const [editorHeight, setEditorHeight] = useState(480);
-  const [plainEditor, setPlainEditor] = useState(false);
+  const [plainEditor, setPlainEditor] = useState(true);
   const [monacoReady, setMonacoReady] = useState(false);
   const editorBodyRef = useRef<HTMLDivElement>(null);
   const userEdited = useRef(false);
@@ -52,7 +52,7 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
     if (open) {
       setSource(serializeProject(project));
       userEdited.current = false;
-      setPlainEditor(false);
+      setPlainEditor(true);
       setMonacoReady(false);
     } else {
       userEdited.current = false;
@@ -235,7 +235,7 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
         <div className="flex h-6 shrink-0 items-center justify-between bg-[#007acc] px-3 font-mono text-[10px] text-white">
           <span>Mapper YAML</span>
           <button type="button" className="underline-offset-2 hover:underline" onClick={() => setPlainEditor((current) => !current)}>
-            {plainEditor ? "Plain text" : "Monaco"} | UTF-8 | Spaces: 2
+            {plainEditor ? "Plain editor" : "Monaco editor"} | UTF-8 | Spaces: 2
           </button>
         </div>
         <div className="relative z-10 flex shrink-0 justify-end gap-2 border-t border-[#2b2b2b] bg-[#181818] p-3 shadow-[0_-8px_20px_rgba(0,0,0,0.25)]">
