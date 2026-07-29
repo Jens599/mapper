@@ -1,5 +1,4 @@
 import type * as Monaco from "monaco-editor";
-import "monaco-editor/esm/vs/basic-languages/yaml/yaml.contribution";
 import { configureMonacoYaml, type MonacoYaml } from "monaco-yaml";
 
 let yamlConfig: MonacoYaml | null = null;
@@ -34,6 +33,23 @@ export function configureMapperMonaco(monaco: typeof Monaco) {
       "editor.selectionBackground": "#264f78",
       "editor.lineHighlightBackground": "#2a2d2e",
       "editorGutter.background": "#1e1e1e",
+    },
+  });
+
+  if (!monaco.languages.getLanguages().some((language) => language.id === "yaml")) {
+    monaco.languages.register({ id: "yaml", extensions: [".yaml", ".yml"], aliases: ["YAML", "yaml"] });
+  }
+
+  monaco.languages.setMonarchTokensProvider("yaml", {
+    tokenizer: {
+      root: [
+        [/^\s*[-?]?\s*([\w.-]+)(:)/, ["key", "delimiter"]],
+        [/"(?:[^"\\]|\\.)*"/, "string"],
+        [/'(?:[^'\\]|\\.)*'/, "string"],
+        [/\b(?:true|false|null)\b/, "keyword"],
+        [/-?\d+(?:\.\d+)?\b/, "number"],
+        [/#.*$/, "comment"],
+      ],
     },
   });
 
