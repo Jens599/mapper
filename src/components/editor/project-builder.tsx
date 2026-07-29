@@ -205,11 +205,11 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
           <span>Mapper YAML</span>
           <span>YAML | UTF-8 | Spaces: 2</span>
         </div>
-        <div className="flex shrink-0 justify-end gap-2 border-t border-[#2b2b2b] bg-[#181818] p-3">
+        <div className="relative z-10 flex shrink-0 justify-end gap-2 border-t border-[#2b2b2b] bg-[#181818] p-3 shadow-[0_-8px_20px_rgba(0,0,0,0.25)]">
           <Button variant="ghost" className="text-[#d4d4d4] hover:bg-[#2a2d2e] hover:text-white" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={applySource} disabled={pending}>
+          <Button className="bg-[#e26d45] text-white hover:bg-[#f17d55]" onClick={applySource} disabled={pending}>
             {pending ? "Applying..." : "Apply YAML"}
           </Button>
         </div>

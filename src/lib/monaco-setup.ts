@@ -1,4 +1,5 @@
 import type * as Monaco from "monaco-editor";
+import "monaco-editor/esm/vs/basic-languages/yaml/yaml.contribution";
 import { configureMonacoYaml, type MonacoYaml } from "monaco-yaml";
 
 let yamlConfig: MonacoYaml | null = null;

@@ -290,6 +290,15 @@ function stopLabelBounds(
   return { left: position.x - labelGap - labelWidth + offsetX, right: position.x - labelGap + offsetX, top: position.y - labelHeight / 2 + offsetY, bottom: position.y + labelHeight / 2 + offsetY };
 }
 
+function titleBlockBounds(titlePosition: { x: number; y: number }): Bounds {
+  return {
+    left: titlePosition.x - 12,
+    right: titlePosition.x + 346,
+    top: titlePosition.y - 12,
+    bottom: titlePosition.y + 84,
+  };
+}
+
 function buildRoutePathInfo(
   start: { x: number; y: number },
   end: { x: number; y: number },
@@ -351,6 +360,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const updateLegStyle = useEditorStore((state) => state.updateLegStyle);
   const resetSymbolicLayout = useEditorStore((state) => state.resetSymbolicLayout);
   const svgRef = useRef<SVGSVGElement>(null);
+  const alignedOnLoadKey = useRef<string | null>(null);
   const [dragging, setDragging] = useState<{
     id: string;
     type: "stop" | "symbol" | "curve" | "title";
@@ -414,6 +424,13 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
     return () => svg.removeEventListener("wheel", zoomWithWheel);
   }, []);
 
+  useEffect(() => {
+    const alignmentKey = `${project.id}:${project.stops.map((stop) => `${stop.id}:${stop.diagramPosition?.x ?? "geo"}:${stop.diagramPosition?.y ?? "geo"}`).join("|")}`;
+    if (alignedOnLoadKey.current === alignmentKey) return;
+    alignedOnLoadKey.current = alignmentKey;
+    for (const stop of project.stops.filter((item) => item.visible)) moveLabelToLeastCoveredArea(stop.id);
+  }, [project.id]);
+
   function changeZoom(nextZoom: number) {
     setViewport((current) => ({
       ...current,
@@ -462,6 +479,9 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
         stopLabelBounds(other, otherPosition, anchor, textScale, largerDayText),
       ];
     });
+    if (currentProject.presentation.showTitleBlock !== false) {
+      obstacles.push(titleBlockBounds(currentProject.presentation.titlePosition ?? { x: 54, y: 56 }));
+    }
     for (const leg of currentProject.legs.filter((item) => item.visible)) {
       const start = currentPositions.get(leg.from);
       const end = currentPositions.get(leg.to);
@@ -568,6 +588,9 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
         }}
         onPointerUp={() => {
           if (dragging?.type === "stop") moveLabelToLeastCoveredArea(dragging.id);
+          if (dragging?.type === "title") {
+            for (const stop of project.stops.filter((item) => item.visible)) moveLabelToLeastCoveredArea(stop.id);
+          }
           setDragging(null);
           setPanning(null);
         }}
@@ -763,7 +786,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           if (!position) return null;
           const anchor = stop.labelAnchor === "auto" ? (index % 2 === 0 ? "top" : "bottom") : stop.labelAnchor;
           const iconSvg = getPointIconSvg(stop.icon, project.iconAssets);
-          const sizedIcon = iconSvg ? sizeIconSvg(iconSvg, { width: 20, height: 20 }) : null;
+          const sizedIcon = iconSvg ? sizeIconSvg(iconSvg, { width: 20, height: 20, color: canvasFg }) : null;
           const endpointRole = index === 0 ? "START" : index === project.stops.length - 1 ? "FINISH" : null;
           const displayedDayLabel = sequentialDayLabels ? `Day ${index + 1}` : stop.dayLabel;
           const markerRadius = emphasizeEndpoints && endpointRole ? 17 : 13;
