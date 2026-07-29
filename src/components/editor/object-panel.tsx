@@ -75,6 +75,7 @@ const modeIcons = {
 
 const symbolicPresentationOptions = [
   ["Line background", "showLineHalo"],
+  ["Arrowheads", "showArrowheads"],
   ["Legend", "showLegend"],
   ["Title/subtitle", "showTitleBlock"],
   ["Nepal silhouette", "showMapSilhouette"],
@@ -111,7 +112,12 @@ const defaultLegStyle: TravelLeg["style"] = {
   noiseOctaves: 3,
   noiseModulation: 0,
   color: "#0f766e",
+  showArrowhead: true,
 };
+
+function requestObjectEdit(id: string) {
+  window.dispatchEvent(new CustomEvent("mapper:edit-object", { detail: { id } }));
+}
 
 function CollapsibleSection({
   id,
@@ -195,6 +201,7 @@ function ObjectRow({
           selectObject(id);
           onSelectComplete?.();
         }}
+        onDoubleClick={() => requestObjectEdit(id)}
         aria-current={selected ? "true" : undefined}
         className="focus-ring flex min-h-12 min-w-0 items-center gap-2 px-2.5 text-left"
       >
@@ -258,6 +265,14 @@ function EditStopDialog({ stop }: { stop: TravelStop }) {
     setOpen(true);
   }
 
+  useEffect(() => {
+    function editRequested(event: Event) {
+      if ((event as CustomEvent<{ id?: string }>).detail?.id === stop.id) openEditor();
+    }
+    window.addEventListener("mapper:edit-object", editRequested);
+    return () => window.removeEventListener("mapper:edit-object", editRequested);
+  });
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <Button variant="outline" size="sm" onClick={openEditor}><Pencil aria-hidden="true" /> Edit stop</Button>
@@ -311,6 +326,14 @@ function EditLegDialog({ leg, stops }: { leg: TravelLeg; stops: TravelStop[] }) 
     setOpen(true);
   }
 
+  useEffect(() => {
+    function editRequested(event: Event) {
+      if ((event as CustomEvent<{ id?: string }>).detail?.id === leg.id) openEditor();
+    }
+    window.addEventListener("mapper:edit-object", editRequested);
+    return () => window.removeEventListener("mapper:edit-object", editRequested);
+  });
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <Button variant="outline" size="sm" onClick={openEditor}><Pencil aria-hidden="true" /> Edit leg</Button>
@@ -327,10 +350,10 @@ function EditLegDialog({ leg, stops }: { leg: TravelLeg; stops: TravelStop[] }) 
             <div className="grid gap-1.5"><Label htmlFor="edit-leg-to">To</Label><Select value={to} onValueChange={(value) => value && setTo(value)}><SelectTrigger id="edit-leg-to" className="w-full"><SelectValue /></SelectTrigger><SelectContent>{stops.map((stop) => <SelectItem key={stop.id} value={stop.id}>{stop.name}</SelectItem>)}</SelectContent></Select></div>
           </div>
           <div className="grid gap-1.5"><Label htmlFor="edit-leg-mode">Travel mode</Label><Select value={mode} onValueChange={(value) => value && setMode(value as TravelLeg["mode"])}><SelectTrigger id="edit-leg-mode" className="w-full"><SelectValue /></SelectTrigger><SelectContent>{Object.keys(modeIcons).map((travelMode) => <SelectItem key={travelMode} value={travelMode}>{travelMode}</SelectItem>)}</SelectContent></Select></div>
-          <label className="flex min-h-9 items-center justify-between gap-3 text-sm">Loopback<Switch checked={loopback} onCheckedChange={(checked) => { setLoopback(checked); if (checked && from) setTo(from); }} /></label>
+          <label className="flex min-h-9 items-center justify-between gap-3 text-sm">Loopback return trip<Switch checked={loopback} onCheckedChange={setLoopback} /></label>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="submit" disabled={!name.trim() || !from || !to || (from === to && !loopback)}>Save leg</Button>
+            <Button type="submit" disabled={!name.trim() || !from || !to || from === to}>Save leg</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -562,6 +585,10 @@ function LegProperties({
         Show destination day on arrow
         <Switch checked={leg.showDayLabel} onCheckedChange={(checked) => updateTravelLeg(leg.id, { showDayLabel: checked })} />
       </label>
+      <label className="flex min-h-9 items-center justify-between gap-3 text-sm">
+        Show arrowhead on this leg
+        <Switch checked={style.showArrowhead !== false} onCheckedChange={(checked) => updateLegStyle(leg.id, "showArrowhead", checked)} />
+      </label>
       <NoiseControl
         id={`${idPrefix}curvature`}
         label="Route curve"
@@ -630,6 +657,7 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
   const lineScale = Number.isFinite(presentation.lineScale) ? presentation.lineScale : 1;
   const textScale = Number.isFinite(presentation.textScale) ? presentation.textScale : 1;
   const symbolScale = Number.isFinite(presentation.symbolScale) ? presentation.symbolScale : 1;
+  const arrowheadScale = Number.isFinite(presentation.arrowheadScale) ? presentation.arrowheadScale : 0.5;
 
   if (!mapSettings) return null;
 
@@ -721,6 +749,33 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
               />
             </div>
           </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor={`${idPrefix}line-halo-color`}>Line background color</Label>
+            <div className="flex items-center gap-2">
+              <input
+                id={`${idPrefix}line-halo-color`}
+                type="color"
+                value={presentation.lineHaloColor ?? "#ffffff"}
+                onChange={(event) => updatePresentation("lineHaloColor", event.currentTarget.value)}
+                className="size-7 cursor-pointer rounded border bg-transparent p-0.5"
+              />
+              <span className="font-mono text-xs text-muted-foreground">{presentation.lineHaloColor ?? "#ffffff"}</span>
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor={`${idPrefix}line-path-color`}>Route line color</Label>
+            <div className="flex items-center gap-2">
+              <input
+                id={`${idPrefix}line-path-color`}
+                type="color"
+                value={presentation.linePathColor ?? "#18221d"}
+                onChange={(event) => updatePresentation("linePathColor", event.currentTarget.value)}
+                className="size-7 cursor-pointer rounded border bg-transparent p-0.5"
+              />
+              <span className="font-mono text-xs text-muted-foreground">{presentation.linePathColor ?? "auto"}</span>
+              {presentation.linePathColor ? <Button type="button" variant="outline" size="sm" onClick={() => updatePresentation("linePathColor", undefined)}>Reset</Button> : null}
+            </div>
+          </div>
           <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
             Transport icons
             <Switch
@@ -808,6 +863,7 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
         </p>
         <Button variant="outline" size="sm" onClick={resetPresentation}>Reset scales</Button>
         <NoiseControl id={`${idPrefix}line-scale`} label="Lines" value={lineScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("lineScale", value)} />
+        <NoiseControl id={`${idPrefix}arrowhead-scale`} label="Arrowheads" value={arrowheadScale} min={0.4} max={2} step={0.05} onChange={(value) => updatePresentation("arrowheadScale", value)} />
         <NoiseControl id={`${idPrefix}text-scale`} label="Text" value={textScale} min={0.5} max={3} step={0.05} onChange={(value) => updatePresentation("textScale", value)} />
         <NoiseControl id={`${idPrefix}symbol-global-scale`} label="Symbols" value={symbolScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("symbolScale", value)} />
       </div>
@@ -960,7 +1016,26 @@ function FormatPainterControls() {
   const formatClipboard = useEditorStore((state) => state.formatClipboard);
   const formatPainterActive = useEditorStore((state) => state.formatPainterActive);
   const copySelectedFormat = useEditorStore((state) => state.copySelectedFormat);
+  const armShiftFormatPainter = useEditorStore((state) => state.armShiftFormatPainter);
   const cancelFormatPainter = useEditorStore((state) => state.cancelFormatPainter);
+  const cancelShiftFormatPainter = useEditorStore((state) => state.cancelShiftFormatPainter);
+
+  useEffect(() => {
+    function startShiftPainter(event: KeyboardEvent) {
+      if (event.key === "Shift") armShiftFormatPainter();
+    }
+    function stopShiftPainter(event: KeyboardEvent) {
+      if (event.key === "Shift") cancelShiftFormatPainter();
+    }
+    window.addEventListener("keydown", startShiftPainter);
+    window.addEventListener("keyup", stopShiftPainter);
+    window.addEventListener("blur", cancelShiftFormatPainter);
+    return () => {
+      window.removeEventListener("keydown", startShiftPainter);
+      window.removeEventListener("keyup", stopShiftPainter);
+      window.removeEventListener("blur", cancelShiftFormatPainter);
+    };
+  }, [armShiftFormatPainter, cancelShiftFormatPainter]);
 
   if (project.kind !== "travel") return null;
 
@@ -983,7 +1058,7 @@ function FormatPainterControls() {
             Format painter
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {formatPainterActive ? `Click a ${copiedLabel} to apply.` : "Copy styling, then click a matching target."}
+            {formatPainterActive ? `Click a ${copiedLabel} to apply. Shift-hold cancels on key release if unused.` : "Copy styling, then click a matching target."}
           </p>
         </div>
         {formatPainterActive ? (
@@ -992,7 +1067,7 @@ function FormatPainterControls() {
           </Button>
         ) : null}
       </div>
-      <Button variant={formatPainterActive ? "default" : "outline"} size="sm" disabled={!canCopy} onClick={copySelectedFormat}>
+      <Button variant={formatPainterActive ? "default" : "outline"} size="sm" disabled={!canCopy} onClick={(event) => copySelectedFormat(event.shiftKey)}>
         <Paintbrush aria-hidden="true" /> Copy format
       </Button>
     </div>
@@ -1162,18 +1237,15 @@ function AddTravelObject() {
                 </Select>
               </div>
               <label className="flex min-h-9 items-center justify-between gap-3 text-sm">
-                Loop back to one stop
+                Loopback return trip
                 <Switch
                   checked={loopback}
-                  onCheckedChange={(checked) => {
-                    setLoopback(checked);
-                    if (checked && from) setTo(from);
-                  }}
+                  onCheckedChange={setLoopback}
                 />
               </label>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setDialog(null)}>Cancel</Button>
-                <Button type="submit" disabled={!legName.trim() || !from || !to || (from === to && !loopback)}>Add leg</Button>
+                <Button type="submit" disabled={!legName.trim() || !from || !to || from === to}>Add leg</Button>
               </DialogFooter>
             </form>
           ) : (

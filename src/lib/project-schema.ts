@@ -41,6 +41,10 @@ const presentationSchema = z.object({
   lineScale: z.number().min(0.25).max(4),
   textScale: z.number().min(0.5).max(3),
   symbolScale: z.number().min(0.25).max(4),
+  arrowheadScale: z.number().min(0.4).max(2).default(0.5),
+  lineHaloColor: z.string().regex(/^#[0-9a-f]{6}$/i).default("#ffffff"),
+  linePathColor: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
+  showArrowheads: z.boolean().default(true),
   showModeIcons: z.boolean().default(false),
   showLineHalo: z.boolean().default(true),
   showLegend: z.boolean().default(false),
@@ -53,6 +57,7 @@ const presentationSchema = z.object({
   vividTransportColors: z.boolean().default(false),
   fillCanvas: z.boolean().default(false),
   largerDayText: z.boolean().default(false),
+  titlePosition: z.object({ x: z.number().finite(), y: z.number().finite() }).default({ x: 54, y: 56 }),
 });
 
 export const legStyleSchema = z.object({
@@ -65,6 +70,7 @@ export const legStyleSchema = z.object({
   noiseOctaves: z.number().int().min(1).max(6).default(3),
   noiseModulation: z.number().min(-10).max(10).default(0),
   color: z.string().regex(/^#[0-9a-f]{6}$/i),
+  showArrowhead: z.boolean().default(true),
 });
 
 export const travelLegSchema = z.object({
@@ -244,6 +250,9 @@ const travelProjectSchema = z.object({
       lineScale: 1,
       textScale: 1,
       symbolScale: 1,
+      arrowheadScale: 0.5,
+      lineHaloColor: "#ffffff",
+      showArrowheads: true,
       showModeIcons: false,
       showLineHalo: true,
       showLegend: false,
@@ -256,6 +265,7 @@ const travelProjectSchema = z.object({
       vividTransportColors: false,
       fillCanvas: false,
       largerDayText: false,
+      titlePosition: { x: 54, y: 56 },
     }),
     map: z.object({
       display: z.enum(["geographic", "symbolic"]).default("symbolic"),
@@ -284,6 +294,9 @@ const trailProjectSchema = z.object({
     lineScale: 1,
     textScale: 1,
     symbolScale: 1,
+    arrowheadScale: 0.5,
+    lineHaloColor: "#ffffff",
+    showArrowheads: true,
     showModeIcons: false,
     showLineHalo: true,
     showLegend: false,
@@ -296,6 +309,7 @@ const trailProjectSchema = z.object({
     vividTransportColors: false,
     fillCanvas: false,
     largerDayText: false,
+    titlePosition: { x: 54, y: 56 },
   }),
   canvas: z.object({
     width: z.number().positive().max(100_000),

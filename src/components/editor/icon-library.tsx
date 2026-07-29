@@ -121,12 +121,10 @@ export function IconLibrary({ children }: { children: React.ReactNode }) {
               <select
                 id="scatter-region"
                 value={scatterOptions.region}
-                onChange={(event) =>
-                  setScatterOptions((value) => ({
-                    ...value,
-                    region: event.currentTarget.value as typeof value.region,
-                  }))
-                }
+                onChange={(event) => {
+                  const region = event.currentTarget.value as typeof scatterOptions.region;
+                  setScatterOptions((value) => ({ ...value, region }));
+                }}
                 className="focus-ring h-8 rounded-md border bg-background px-2 text-sm"
               >
                 <option value="top">Top edge</option>
@@ -136,12 +134,18 @@ export function IconLibrary({ children }: { children: React.ReactNode }) {
             </div>
             <div className="grid gap-1">
               <Label htmlFor="scatter-count">Count</Label>
-              <Input id="scatter-count" type="number" min={1} max={2000} value={scatterOptions.count} onChange={(event) => setScatterOptions((value) => ({ ...value, count: Math.min(2000, Math.max(1, Math.round(event.currentTarget.valueAsNumber || 1))) }))} />
+              <Input id="scatter-count" type="number" min={1} max={2000} value={scatterOptions.count} onChange={(event) => {
+                const count = Math.min(2000, Math.max(1, Math.round(event.currentTarget.valueAsNumber || 1)));
+                setScatterOptions((value) => ({ ...value, count }));
+              }} />
             </div>
             <div className="grid gap-1">
               <Label htmlFor="scatter-seed">Seed</Label>
               <div className="flex gap-1">
-                <Input id="scatter-seed" type="number" min={0} max={2147483647} value={scatterOptions.seed} onChange={(event) => setScatterOptions((value) => ({ ...value, seed: Math.min(2_147_483_647, Math.max(0, Math.round(event.currentTarget.valueAsNumber || 0))) }))} />
+                <Input id="scatter-seed" type="number" min={0} max={2147483647} value={scatterOptions.seed} onChange={(event) => {
+                  const seed = Math.min(2_147_483_647, Math.max(0, Math.round(event.currentTarget.valueAsNumber || 0)));
+                  setScatterOptions((value) => ({ ...value, seed }));
+                }} />
                 <Button variant="outline" size="icon" aria-label="Randomize scatter seed" onClick={() => setScatterOptions((value) => ({ ...value, seed: crypto.getRandomValues(new Uint32Array(1))[0] % 2_147_483_648 }))}>
                   <RefreshCw aria-hidden="true" />
                 </Button>
@@ -151,15 +155,25 @@ export function IconLibrary({ children }: { children: React.ReactNode }) {
               <Label htmlFor="scatter-spacing">
                 Min spacing {project.kind === "travel" ? "(km)" : `(${project.units})`}
               </Label>
-              <Input id="scatter-spacing" type="number" min={0} max={project.kind === "travel" ? 500 : 1000} step={0.5} value={scatterOptions.minSpacing} onChange={(event) => setScatterOptions((value) => ({ ...value, minSpacing: Math.min(project.kind === "travel" ? 500 : 1000, Math.max(0, event.currentTarget.valueAsNumber || 0)) }))} />
+              <Input id="scatter-spacing" type="number" min={0} max={project.kind === "travel" ? 500 : 1000} step={0.5} value={scatterOptions.minSpacing} onChange={(event) => {
+                const maxSpacing = project.kind === "travel" ? 500 : 1000;
+                const minSpacing = Math.min(maxSpacing, Math.max(0, event.currentTarget.valueAsNumber || 0));
+                setScatterOptions((value) => ({ ...value, minSpacing }));
+              }} />
             </div>
             <div className="grid gap-1">
               <Label htmlFor="scatter-scale-min">Scale min</Label>
-              <Input id="scatter-scale-min" type="number" min={0.1} max={10} step={0.1} value={scatterOptions.scaleMin} onChange={(event) => setScatterOptions((value) => ({ ...value, scaleMin: Math.min(10, Math.max(0.1, event.currentTarget.valueAsNumber || 0.1)) }))} />
+              <Input id="scatter-scale-min" type="number" min={0.1} max={10} step={0.1} value={scatterOptions.scaleMin} onChange={(event) => {
+                const scaleMin = Math.min(10, Math.max(0.1, event.currentTarget.valueAsNumber || 0.1));
+                setScatterOptions((value) => ({ ...value, scaleMin }));
+              }} />
             </div>
             <div className="grid gap-1">
               <Label htmlFor="scatter-scale-max">Scale max</Label>
-              <Input id="scatter-scale-max" type="number" min={0.1} max={10} step={0.1} value={scatterOptions.scaleMax} onChange={(event) => setScatterOptions((value) => ({ ...value, scaleMax: Math.min(10, Math.max(0.1, event.currentTarget.valueAsNumber || 0.1)) }))} />
+              <Input id="scatter-scale-max" type="number" min={0.1} max={10} step={0.1} value={scatterOptions.scaleMax} onChange={(event) => {
+                const scaleMax = Math.min(10, Math.max(0.1, event.currentTarget.valueAsNumber || 0.1));
+                setScatterOptions((value) => ({ ...value, scaleMax }));
+              }} />
             </div>
           </fieldset>
         </div>

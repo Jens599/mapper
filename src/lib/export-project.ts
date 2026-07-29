@@ -1,6 +1,7 @@
 import { toPng } from "html-to-image";
 
 import { getIconSvg, getPointIconSvg, sizeIconSvg } from "@/lib/builtin-icons";
+import { foregroundFromBackground } from "@/lib/color-utils";
 import { generateTravelScatter } from "@/lib/scatter";
 import type { MapperProject, TravelProject } from "@/lib/project-schema";
 import { buildTravelLegsGeoJson, getWrappedLongitudeBounds } from "@/lib/travel-geometry";
@@ -77,8 +78,6 @@ function buildTravelOverlaySvg(project: TravelProject) {
     .filter((stop) => stop.visible)
     .map((stop) => {
       const [x, y] = projectPoint(stop.coordinates);
-      const rawIconSvg = getPointIconSvg(stop.icon, project.iconAssets);
-      const iconSvg = rawIconSvg ? sizeIconSvg(rawIconSvg, { x: -9, y: -9, width: 18, height: 18, color: "#ad4a24" }) : "";
       const anchor = stop.labelAnchor === "auto" ? "right" : stop.labelAnchor;
       const label = anchor === "top"
         ? { x: 0, nameY: -28, dayY: -14, align: "middle" }
@@ -91,6 +90,9 @@ function buildTravelOverlaySvg(project: TravelProject) {
       const fill = ps.showFill === false ? "none" : ps.fill ?? "#f8faf8";
       const stroke = ps.showStroke === false ? "none" : ps.stroke ?? "#ad4a24";
       const sw = ps.strokeWidth ?? 2.5;
+      const rawIconSvg = getPointIconSvg(stop.icon, project.iconAssets);
+      const iconColor = ps.showFill === false ? ps.stroke ?? "#ad4a24" : foregroundFromBackground(fill);
+      const iconSvg = rawIconSvg ? sizeIconSvg(rawIconSvg, { x: -9, y: -9, width: 18, height: 18, color: iconColor }) : "";
       return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)})"><circle r="12" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>${iconSvg}<g transform="translate(${stop.labelOffset[0]} ${stop.labelOffset[1]})"><text x="${label.x}" y="${label.nameY}" text-anchor="${label.align}" font-family="sans-serif" font-size="${14 * project.presentation.textScale}" font-weight="700" fill="#18221d">${escapeXml(stop.name)}</text><text x="${label.x}" y="${label.dayY}" text-anchor="${label.align}" font-family="monospace" font-size="${10 * project.presentation.textScale}" font-weight="600" fill="#99401f">${escapeXml(stop.dayLabel)}</text></g></g>`;
     })
     .join("");

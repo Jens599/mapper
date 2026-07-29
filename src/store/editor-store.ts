@@ -45,7 +45,7 @@ export type NewTravelLeg = {
  };
 
 export type TravelStopUpdate = Partial<
-  Pick<TravelProject["stops"][number], "name" | "dayLabel" | "coordinates" | "elevation" | "labelAnchor" | "labelStyle" | "pointStyle">
+  Pick<TravelProject["stops"][number], "name" | "dayLabel" | "coordinates" | "elevation" | "labelOffset" | "labelAnchor" | "labelStyle" | "pointStyle">
 >;
 
 export type TravelLegUpdate = Partial<
@@ -105,6 +105,7 @@ const defaultTravelLegStyle: LegStyle = {
   noiseOctaves: 3,
   noiseModulation: 0,
   color: "#202b25",
+  showArrowhead: true,
 };
 
 function ensureStopStyleDefaults(stop: TravelStop) {
@@ -213,6 +214,7 @@ type EditorState = {
     selectedIconId: string;
     formatClipboard: FormatClipboard | null;
     formatPainterActive: boolean;
+    formatPainterShiftHeld: boolean;
    switchProjectMode: (kind: MapperProject["kind"]) => void;
    replaceProject: (project: MapperProject) => void;
    selectObject: (id: string) => void;
@@ -226,9 +228,11 @@ type EditorState = {
    setTravelDisplay: (display: "geographic" | "symbolic") => void;
     setMapStyle: (style: TravelProject["map"]["style"]) => void;
     updateProjectMeta: (update: ProjectMetaUpdate) => void;
-    copySelectedFormat: () => void;
+    copySelectedFormat: (shiftHeld?: boolean) => void;
     applyFormatToObject: (id: string) => boolean;
+    armShiftFormatPainter: () => void;
     cancelFormatPainter: () => void;
+    cancelShiftFormatPainter: () => void;
    addTravelStop: (stop: NewTravelStop) => void;
    addTravelLeg: (leg: NewTravelLeg) => void;
    updateTravelStop: (id: string, update: TravelStopUpdate) => void;
@@ -260,7 +264,7 @@ type EditorState = {
    ) => void;
     updatePresentation: (
       key: keyof PresentationSettings,
-      value: number | boolean,
+      value: PresentationSettings[keyof PresentationSettings],
     ) => void;
    resetPresentation: () => void;
    resetSymbolicLayout: () => void;
@@ -268,8 +272,9 @@ type EditorState = {
    updateStopLabelStyle: (id: string, key: keyof NonNullable<TravelStop["labelStyle"]>, value: number | string | boolean) => void;
    moveTravelStop: (id: string, coordinates: [number, number]) => void;
    moveTravelSymbol: (id: string, coordinates: [number, number]) => void;
-   moveSymbolicStop: (id: string, position: { x: number; y: number }) => void;
-   moveSymbolicSymbol: (id: string, position: { x: number; y: number }) => void;
+    moveSymbolicStop: (id: string, position: { x: number; y: number }) => void;
+    moveSymbolicSymbol: (id: string, position: { x: number; y: number }) => void;
+    moveProjectTitle: (position: { x: number; y: number }) => void;
    moveTrailObject: (id: string, position: { x: number; y: number }) => void;
    moveTravelLegControl: (legId: string, curvature: number) => void;
    setMapBackground: (color: string) => void;
@@ -285,6 +290,7 @@ export const useEditorStore = create<EditorState>()(
       selectedIconId: "carbon-mountain",
       formatClipboard: null,
       formatPainterActive: false,
+      formatPainterShiftHeld: false,
      switchProjectMode: (kind) => {
        set((state) => {
          if (state.project.kind === kind) return;
@@ -332,8 +338,9 @@ export const useEditorStore = create<EditorState>()(
               formatPainterActive: state.formatPainterActive,
             });
           }
-          if (state.formatPainterActive && applyFormat(state, id)) {
+          if (state.formatPainterActive && applyFormat(state, id) && !state.formatPainterShiftHeld) {
             state.formatPainterActive = false;
+            state.formatPainterShiftHeld = false;
           }
           state.selectedObjectId = id;
           state.selectedIds = [id];
@@ -490,12 +497,13 @@ export const useEditorStore = create<EditorState>()(
         }
       });
     },
-    copySelectedFormat: () => {
+    copySelectedFormat: (shiftHeld) => {
       set((state) => {
         const format = readFormat(state.project, state.selectedObjectId);
         if (!format) return;
         state.formatClipboard = format;
         state.formatPainterActive = true;
+        state.formatPainterShiftHeld = Boolean(shiftHeld);
       });
     },
     applyFormatToObject: (id) => {
@@ -503,16 +511,33 @@ export const useEditorStore = create<EditorState>()(
       set((state) => {
         applied = applyFormat(state, id);
         if (applied) {
-          state.formatPainterActive = false;
+          if (!state.formatPainterShiftHeld) {
+            state.formatPainterActive = false;
+            state.formatPainterShiftHeld = false;
+          }
           state.selectedObjectId = id;
           state.selectedIds = [id];
         }
       });
       return applied;
     },
+    armShiftFormatPainter: () => {
+      set((state) => {
+        if (!state.formatPainterActive) return;
+        state.formatPainterShiftHeld = true;
+      });
+    },
     cancelFormatPainter: () => {
       set((state) => {
         state.formatPainterActive = false;
+        state.formatPainterShiftHeld = false;
+      });
+    },
+    cancelShiftFormatPainter: () => {
+      set((state) => {
+        if (!state.formatPainterShiftHeld) return;
+        state.formatPainterActive = false;
+        state.formatPainterShiftHeld = false;
       });
     },
     addTravelStop: (stop) => {
@@ -546,7 +571,7 @@ export const useEditorStore = create<EditorState>()(
       set((state) => {
         if (
           state.project.kind !== "travel" ||
-          (leg.from === leg.to && !leg.loopback) ||
+          leg.from === leg.to ||
           !leg.name.trim()
         ) return;
         const stopIds = new Set(state.project.stops.map((stop) => stop.id));
@@ -569,10 +594,11 @@ export const useEditorStore = create<EditorState>()(
              noiseSeed: 42,
              noiseAmplitude: 0,
              noiseScale: 2,
-             noiseOctaves: 3,
-             noiseModulation: 0,
-             color: leg.mode === "flight" ? "#216b8b" : leg.mode === "walk" ? "#ad4a24" : "#202b25",
-           },
+              noiseOctaves: 3,
+              noiseModulation: 0,
+              color: leg.mode === "flight" ? "#216b8b" : leg.mode === "walk" ? "#ad4a24" : "#202b25",
+              showArrowhead: true,
+            },
            visible: true,
          });
         state.selectedObjectId = id;
@@ -592,6 +618,7 @@ export const useEditorStore = create<EditorState>()(
           ];
         }
         if ("elevation" in update) stop.elevation = update.elevation;
+        if (update.labelOffset?.every(Number.isFinite)) stop.labelOffset = update.labelOffset;
         if (update.labelAnchor) stop.labelAnchor = update.labelAnchor;
         if (update.labelStyle) {
           ensureStopStyleDefaults(stop);
@@ -830,7 +857,7 @@ export const useEditorStore = create<EditorState>()(
     },
     updatePresentation: (key, value) => {
       set((state) => {
-        (state.project.presentation as Record<string, number | boolean>)[key] = value;
+        state.project.presentation = { ...state.project.presentation, [key]: value };
       });
     },
     resetPresentation: () => {
@@ -839,6 +866,9 @@ export const useEditorStore = create<EditorState>()(
           lineScale: 1,
           textScale: 1,
           symbolScale: 1,
+          arrowheadScale: 0.5,
+          lineHaloColor: "#ffffff",
+          showArrowheads: true,
           showModeIcons: false,
           showLineHalo: true,
           showLegend: false,
@@ -851,6 +881,7 @@ export const useEditorStore = create<EditorState>()(
           vividTransportColors: false,
           fillCanvas: false,
           largerDayText: false,
+          titlePosition: { x: 54, y: 56 },
         };
       });
     },
@@ -859,6 +890,7 @@ export const useEditorStore = create<EditorState>()(
         if (state.project.kind !== "travel") return;
         for (const stop of state.project.stops) delete stop.diagramPosition;
         for (const symbol of state.project.symbols) delete symbol.diagramPosition;
+        state.project.presentation.titlePosition = { x: 54, y: 56 };
       });
     },
     updateStopLabelOffset: (id, axis, value) => {
@@ -907,6 +939,12 @@ export const useEditorStore = create<EditorState>()(
         if (state.project.kind !== "travel") return;
         const symbol = state.project.symbols.find((item) => item.id === id);
         if (symbol) symbol.diagramPosition = position;
+      });
+    },
+    moveProjectTitle: (position) => {
+      set((state) => {
+        if (state.project.kind !== "travel") return;
+        state.project.presentation.titlePosition = position;
       });
     },
     moveTrailObject: (id, position) => {

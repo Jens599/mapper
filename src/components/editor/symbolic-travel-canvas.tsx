@@ -181,17 +181,192 @@ function directionArrowheads(path: string) {
   });
 }
 
+type Bounds = { left: number; right: number; top: number; bottom: number };
+type RouteRenderPath = { path: string; modeX: number; modeY: number; arrowLabelX: number; arrowLabelY: number };
+
+function boundsFromPoints(points: Array<{ x: number; y: number }>): Bounds | null {
+  if (!points.length) return null;
+  return {
+    left: Math.min(...points.map((point) => point.x)),
+    right: Math.max(...points.map((point) => point.x)),
+    top: Math.min(...points.map((point) => point.y)),
+    bottom: Math.max(...points.map((point) => point.y)),
+  };
+}
+
+function collectContentPoints(
+  project: TravelProject,
+  positions: Map<string, { x: number; y: number }>,
+  symbolScale: number,
+  showTitleBlock: boolean,
+  titlePosition: { x: number; y: number },
+) {
+  const points = project.stops
+    .filter((stop) => stop.visible)
+    .flatMap((stop) => {
+      const position = positions.get(stop.id);
+      return position
+        ? [
+            { x: position.x - 88, y: position.y - 55 },
+            { x: position.x + 88, y: position.y + 55 },
+          ]
+        : [];
+    });
+  for (const leg of project.legs.filter((item) => item.visible)) {
+    const start = positions.get(leg.from);
+    const end = positions.get(leg.to);
+    if (!start || !end) continue;
+    if (leg.loopback && leg.from === leg.to) {
+      const radius = Math.min(190, 48 + Math.abs(leg.style.curvature) * 14);
+      points.push(
+        { x: start.x - radius - 55, y: start.y - radius * 2 - 55 },
+        { x: start.x + radius + 55, y: start.y + radius * 2 + 55 },
+      );
+      continue;
+    }
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const bend = leg.style.curvature * Math.min(120, length * 0.3);
+    const margin = 48 + Math.abs(leg.style.winding) * 12 + Math.abs(leg.style.noiseAmplitude) * 34;
+    const control = {
+      x: (start.x + end.x) / 2 + (-dy / length) * bend,
+      y: (start.y + end.y) / 2 + (dx / length) * bend,
+    };
+    points.push(start, end, { x: control.x - margin, y: control.y - margin }, { x: control.x + margin, y: control.y + margin });
+  }
+  for (const symbol of project.symbols.filter((item) => item.visible)) {
+    const point = symbol.diagramPosition ?? geographicToSymbolic(project, symbol.coordinates);
+    const radius = 20 * symbol.scale * symbolScale;
+    points.push({ x: point.x - radius, y: point.y - radius }, { x: point.x + radius, y: point.y + radius });
+  }
+  for (const scatter of project.scatter.filter((item) => item.visible)) {
+    for (const placement of generateTravelScatter(project, scatter)) {
+      const point = symbolicScatterPosition(project, scatter, placement.coordinates, positions);
+      const radius = 20 * placement.scale * symbolScale;
+      points.push({ x: point.x - radius, y: point.y - radius }, { x: point.x + radius, y: point.y + radius });
+    }
+  }
+  if (showTitleBlock) {
+    points.push({ x: titlePosition.x - 20, y: titlePosition.y - 20 }, { x: titlePosition.x + 354, y: titlePosition.y + 92 });
+  }
+  return points;
+}
+
+function fitViewBoxToBounds(viewBox: string, bounds: Bounds) {
+  const [sourceX, sourceY, sourceWidth, sourceHeight] = viewBox.split(/\s+/).map(Number);
+  if (![sourceX, sourceY, sourceWidth, sourceHeight].every(Number.isFinite) || sourceWidth <= 0 || sourceHeight <= 0) return "";
+  const targetWidth = Math.max((bounds.right - bounds.left) * 1.18, 560);
+  const targetHeight = Math.max((bounds.bottom - bounds.top) * 1.18, 260);
+  const scale = Math.min(targetWidth / sourceWidth, targetHeight / sourceHeight);
+  const centerX = (bounds.left + bounds.right) / 2;
+  const centerY = (bounds.top + bounds.bottom) / 2;
+  const translateX = centerX - (sourceWidth * scale) / 2 - sourceX * scale;
+  const translateY = centerY - (sourceHeight * scale) / 2 - sourceY * scale;
+  return `translate(${translateX.toFixed(1)} ${translateY.toFixed(1)}) scale(${scale.toFixed(4)})`;
+}
+
+function overlapArea(a: Bounds, b: Bounds) {
+  return Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+}
+
+function stopLabelBounds(
+  stop: TravelProject["stops"][number],
+  position: { x: number; y: number },
+  anchor: "top" | "right" | "bottom" | "left",
+  textScale: number,
+  largerDayText: boolean,
+) {
+  const labelStyle = stop.labelStyle ?? { fontSize: 1, color: "#18221d", bold: true };
+  const nameFontSize = 12 * textScale * labelStyle.fontSize;
+  const dayFontSize = (largerDayText ? 10.5 : 9) * textScale * labelStyle.fontSize;
+  const labelWidth = Math.max(144, stop.name.length * nameFontSize * 0.62 + 28, stop.dayLabel.length * dayFontSize * 0.68 + 28);
+  const labelHeight = Math.max(34, nameFontSize + dayFontSize + 14);
+  const labelGap = 23;
+  const offsetX = stop.labelOffset?.[0] ?? 0;
+  const offsetY = stop.labelOffset?.[1] ?? 0;
+  if (anchor === "top") return { left: position.x - labelWidth / 2 + offsetX, right: position.x + labelWidth / 2 + offsetX, top: position.y - labelGap - labelHeight + offsetY, bottom: position.y - labelGap + offsetY };
+  if (anchor === "bottom") return { left: position.x - labelWidth / 2 + offsetX, right: position.x + labelWidth / 2 + offsetX, top: position.y + labelGap + offsetY, bottom: position.y + labelGap + labelHeight + offsetY };
+  if (anchor === "right") return { left: position.x + labelGap + offsetX, right: position.x + labelGap + labelWidth + offsetX, top: position.y - labelHeight / 2 + offsetY, bottom: position.y + labelHeight / 2 + offsetY };
+  return { left: position.x - labelGap - labelWidth + offsetX, right: position.x - labelGap + offsetX, top: position.y - labelHeight / 2 + offsetY, bottom: position.y + labelHeight / 2 + offsetY };
+}
+
+function titleBlockBounds(titlePosition: { x: number; y: number }): Bounds {
+  return {
+    left: titlePosition.x - 12,
+    right: titlePosition.x + 346,
+    top: titlePosition.y - 12,
+    bottom: titlePosition.y + 84,
+  };
+}
+
+function buildRoutePathInfo(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  style: TravelProject["legs"][number]["style"],
+  curvatureMultiplier = 1,
+) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const normalX = -dy / length;
+  const normalY = dx / length;
+  const bend = style.curvature * curvatureMultiplier * Math.min(120, length * 0.3);
+  const cx = (start.x + end.x) / 2 + normalX * bend;
+  const cy = (start.y + end.y) / 2 + normalY * bend;
+  const startTangentLength = Math.hypot(cx - start.x, cy - start.y) || 1;
+  const endTangentLength = Math.hypot(end.x - cx, end.y - cy) || 1;
+  const routeStart = {
+    x: start.x + ((cx - start.x) / startTangentLength) * 12,
+    y: start.y + ((cy - start.y) / startTangentLength) * 12,
+  };
+  const routeEnd = {
+    x: end.x - ((end.x - cx) / endTangentLength) * 26,
+    y: end.y - ((end.y - cy) / endTangentLength) * 26,
+  };
+  const mid = {
+    x: 0.25 * routeStart.x + 0.5 * cx + 0.25 * routeEnd.x,
+    y: 0.25 * routeStart.y + 0.5 * cy + 0.25 * routeEnd.y,
+  };
+  return {
+    path: buildSymbolicLegPath(routeStart, { x: cx, y: cy }, routeEnd, style),
+    normalX,
+    normalY,
+    modeX: mid.x + normalX * 22,
+    modeY: mid.y + normalY * 22,
+    arrowLabelX: routeEnd.x - normalX * 15,
+    arrowLabelY: routeEnd.y - normalY * 15,
+  };
+}
+
+function pathObstacleBounds(path: string) {
+  return pathPoints(path).flatMap((point, index, points) => {
+    if (index % 4 !== 0 && index !== points.length - 1) return [];
+    const radius = index > points.length - 6 ? 24 : 12;
+    return [{ left: point.x - radius, right: point.x + radius, top: point.y - radius, bottom: point.y + radius }];
+  });
+}
+
+function requestObjectEdit(id: string) {
+  window.dispatchEvent(new CustomEvent("mapper:edit-object", { detail: { id } }));
+}
+
 export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const selectObject = useEditorStore((state) => state.selectObject);
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
   const moveSymbolicStop = useEditorStore((state) => state.moveSymbolicStop);
   const moveSymbolicSymbol = useEditorStore((state) => state.moveSymbolicSymbol);
+  const moveProjectTitle = useEditorStore((state) => state.moveProjectTitle);
+  const updateTravelStop = useEditorStore((state) => state.updateTravelStop);
   const updateLegStyle = useEditorStore((state) => state.updateLegStyle);
   const resetSymbolicLayout = useEditorStore((state) => state.resetSymbolicLayout);
   const svgRef = useRef<SVGSVGElement>(null);
+  const alignedOnLoadKey = useRef<string | null>(null);
   const [dragging, setDragging] = useState<{
     id: string;
-    type: "stop" | "symbol" | "curve";
+    type: "stop" | "symbol" | "curve" | "title";
+    offsetX?: number;
+    offsetY?: number;
   } | null>(null);
   const [viewport, setViewport] = useState({ centerX: 500, centerY: 350, zoom: 1 });
   const [panning, setPanning] = useState<{
@@ -203,6 +378,10 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
     lineScale: rawLineScale,
     textScale: rawTextScale,
     symbolScale: rawSymbolScale,
+    arrowheadScale: rawArrowheadScale,
+    lineHaloColor,
+    linePathColor,
+    showArrowheads,
     showLineHalo,
     showLegend,
     showTitleBlock,
@@ -217,6 +396,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const lineScale = Number.isFinite(rawLineScale) ? rawLineScale : 1;
   const textScale = Number.isFinite(rawTextScale) ? rawTextScale : 1;
   const symbolScale = Number.isFinite(rawSymbolScale) ? rawSymbolScale : 1;
+  const arrowheadScale = Number.isFinite(rawArrowheadScale) ? rawArrowheadScale : 0.5;
   const legendItems: Array<[string, string, string | undefined]> = [
     ["Flight", transportColor("flight", "#216b8b", vividTransportColors), "8 6"],
     ["Drive", transportColor("drive", "#202b25", vividTransportColors), undefined],
@@ -227,6 +407,9 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const canvasFg = foregroundFromBackground(project.map.background);
   const canvasMuted = mutedFromBackground(project.map.background);
   const boundaries = project.boundaries ?? [];
+  const titlePosition = project.presentation.titlePosition ?? { x: 54, y: 56 };
+  const contentBounds = boundsFromPoints(collectContentPoints(project, positions, symbolScale, showTitleBlock, titlePosition)) ?? { left: 90, right: 910, top: 86, bottom: 614 };
+  const backdropAttribution = showMapSilhouette ? nepalBoundary.attribution : boundaries.find((boundary) => boundary.visible)?.attribution;
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -242,6 +425,13 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
     return () => svg.removeEventListener("wheel", zoomWithWheel);
   }, []);
 
+  useEffect(() => {
+    const alignmentKey = `${project.id}:${project.stops.map((stop) => `${stop.id}:${stop.diagramPosition?.x ?? "geo"}:${stop.diagramPosition?.y ?? "geo"}`).join("|")}`;
+    if (alignedOnLoadKey.current === alignmentKey) return;
+    alignedOnLoadKey.current = alignmentKey;
+    for (const stop of project.stops.filter((item) => item.visible)) moveLabelToLeastCoveredArea(stop.id);
+  }, [project]);
+
   function changeZoom(nextZoom: number) {
     setViewport((current) => ({
       ...current,
@@ -250,65 +440,11 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   }
 
   function fitToScreen() {
-    const points = project.stops
-      .filter((stop) => stop.visible)
-      .flatMap((stop) => {
-        const position = positions.get(stop.id);
-        return position
-          ? [
-              { x: position.x - 88, y: position.y - 55 },
-              { x: position.x + 88, y: position.y + 55 },
-            ]
-          : [];
-      });
-    for (const leg of project.legs.filter((item) => item.visible)) {
-      const start = positions.get(leg.from);
-      const end = positions.get(leg.to);
-      if (!start || !end) continue;
-      if (leg.loopback && leg.from === leg.to) {
-        const radius = Math.min(190, 48 + Math.abs(leg.style.curvature) * 14);
-        points.push(
-          { x: start.x - radius - 55, y: start.y - radius * 2 - 55 },
-          { x: start.x + radius + 55, y: start.y + radius * 2 + 55 },
-        );
-        continue;
-      }
-      const dx = end.x - start.x;
-      const dy = end.y - start.y;
-      const length = Math.hypot(dx, dy) || 1;
-      const bend = leg.style.curvature * Math.min(120, length * 0.3);
-      const margin = 48 + Math.abs(leg.style.winding) * 12 + Math.abs(leg.style.noiseAmplitude) * 34;
-      const control = {
-        x: (start.x + end.x) / 2 + (-dy / length) * bend,
-        y: (start.y + end.y) / 2 + (dx / length) * bend,
-      };
-      points.push(
-        start,
-        end,
-        { x: control.x - margin, y: control.y - margin },
-        { x: control.x + margin, y: control.y + margin },
-      );
-    }
-    for (const symbol of project.symbols.filter((item) => item.visible)) {
-      const point = symbol.diagramPosition ?? geographicToSymbolic(project, symbol.coordinates);
-      const radius = 20 * symbol.scale * symbolScale;
-      points.push({ x: point.x - radius, y: point.y - radius }, { x: point.x + radius, y: point.y + radius });
-    }
-    for (const scatter of project.scatter.filter((item) => item.visible)) {
-      for (const placement of generateTravelScatter(project, scatter)) {
-        const point = symbolicScatterPosition(project, scatter, placement.coordinates, positions);
-        const radius = 20 * placement.scale * symbolScale;
-        points.push({ x: point.x - radius, y: point.y - radius }, { x: point.x + radius, y: point.y + radius });
-      }
-    }
-    if (!points.length) {
+    if (!contentBounds) {
       setViewport({ centerX: 500, centerY: 350, zoom: 1 });
       return;
     }
-    const left = Math.min(...points.map((point) => point.x));
-    const right = Math.max(...points.map((point) => point.x));
-    const top = Math.min(...points.map((point) => point.y));
-    const bottom = Math.max(...points.map((point) => point.y));
+    const { left, right, top, bottom } = contentBounds;
     setViewport({
       centerX: (left + right) / 2,
       centerY: (top + bottom) / 2,
@@ -316,7 +452,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
     });
   }
 
-  function pointerPosition(event: React.PointerEvent<SVGSVGElement>) {
+  function pointerPosition(event: { clientX: number; clientY: number }) {
     const svg = svgRef.current;
     const matrix = svg?.getScreenCTM();
     if (!svg || !matrix) return null;
@@ -324,6 +460,50 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
     point.x = event.clientX;
     point.y = event.clientY;
     return point.matrixTransform(matrix.inverse());
+  }
+
+  function moveLabelToLeastCoveredArea(stopId: string) {
+    const currentProject = useEditorStore.getState().project;
+    if (currentProject.kind !== "travel") return;
+    const currentPositions = getSymbolicStopPositions(currentProject);
+    const stop = currentProject.stops.find((item) => item.id === stopId);
+    const position = currentPositions.get(stopId);
+    if (!stop || !position) return;
+    const currentBounds = boundsFromPoints(collectContentPoints(currentProject, currentPositions, symbolScale, showTitleBlock, currentProject.presentation.titlePosition ?? { x: 54, y: 56 })) ?? contentBounds;
+    const candidates = ["top", "right", "bottom", "left"] as const;
+    const obstacles = currentProject.stops.filter((item) => item.visible && item.id !== stopId).flatMap((other, index) => {
+      const otherPosition = currentPositions.get(other.id);
+      if (!otherPosition) return [];
+      const anchor = other.labelAnchor === "auto" ? (index % 2 === 0 ? "top" : "bottom") : other.labelAnchor;
+      return [
+        { left: otherPosition.x - 22, right: otherPosition.x + 22, top: otherPosition.y - 22, bottom: otherPosition.y + 22 },
+        stopLabelBounds(other, otherPosition, anchor, textScale, largerDayText),
+      ];
+    });
+    if (currentProject.presentation.showTitleBlock !== false) {
+      obstacles.push(titleBlockBounds(currentProject.presentation.titlePosition ?? { x: 54, y: 56 }));
+    }
+    for (const leg of currentProject.legs.filter((item) => item.visible)) {
+      const start = currentPositions.get(leg.from);
+      const end = currentPositions.get(leg.to);
+      if (!start || !end) continue;
+      if (leg.loopback && leg.from === leg.to) {
+        obstacles.push(...pathObstacleBounds(buildSymbolicLoopPath(start, leg.style).path));
+      } else {
+        const outbound = buildRoutePathInfo(start, end, leg.style, 1).path;
+        obstacles.push(...pathObstacleBounds(outbound));
+        if (leg.loopback) obstacles.push(...pathObstacleBounds(buildRoutePathInfo(end, start, leg.style, 1).path));
+      }
+    }
+    const best = candidates
+      .map((anchor) => {
+        const bounds = stopLabelBounds({ ...stop, labelOffset: [0, 0] }, position, anchor, textScale, largerDayText);
+        const overlap = obstacles.reduce((total, obstacle) => total + overlapArea(bounds, obstacle), 0);
+        const overflow = overlapArea(bounds, { left: -10_000, right: currentBounds.left, top: -10_000, bottom: 10_000 }) + overlapArea(bounds, { left: currentBounds.right, right: 10_000, top: -10_000, bottom: 10_000 });
+        return { anchor, score: overlap * 100 + overflow };
+      })
+      .sort((a, b) => a.score - b.score)[0];
+    if (best) updateTravelStop(stop.id, { labelAnchor: best.anchor, labelOffset: [0, 0] });
   }
 
   return (
@@ -380,7 +560,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
             moveSymbolicStop(dragging.id, { x: point.x, y: point.y });
           } else if (dragging.type === "symbol") {
             moveSymbolicSymbol(dragging.id, { x: point.x, y: point.y });
-          } else {
+          } else if (dragging.type === "curve") {
             const leg = project.legs.find((item) => item.id === dragging.id);
             const start = leg ? positions.get(leg.from) : null;
             const end = leg ? positions.get(leg.to) : null;
@@ -400,9 +580,18 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
               const curvature = ((point.x - midpoint.x) * normalX + (point.y - midpoint.y) * normalY) / bendUnit;
               updateLegStyle(leg.id, "curvature", Math.min(10, Math.max(-10, curvature)));
             }
+          } else {
+            moveProjectTitle({
+              x: point.x - (dragging.offsetX ?? 0),
+              y: point.y - (dragging.offsetY ?? 0),
+            });
           }
         }}
         onPointerUp={() => {
+          if (dragging?.type === "stop") moveLabelToLeastCoveredArea(dragging.id);
+          if (dragging?.type === "title") {
+            for (const stop of project.stops.filter((item) => item.visible)) moveLabelToLeastCoveredArea(stop.id);
+          }
           setDragging(null);
           setPanning(null);
         }}
@@ -417,16 +606,16 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           Positions are illustrative and not geographically accurate.
         </desc>
         <defs>
-          <marker id="symbolic-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <marker id="symbolic-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth={6 * arrowheadScale} markerHeight={6 * arrowheadScale} orient="auto-start-reverse">
             <path d="M0 0 10 5 0 10Z" fill="context-stroke" />
           </marker>
-          <marker id="symbolic-arrow-strong" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <marker id="symbolic-arrow-strong" viewBox="0 0 10 10" refX="8" refY="5" markerWidth={8 * arrowheadScale} markerHeight={8 * arrowheadScale} orient="auto-start-reverse">
             <path d="M0 0 10 5 0 10Z" fill="context-stroke" />
           </marker>
         </defs>
 
         {showMapSilhouette ? (
-          <g transform="translate(90 104) scale(0.82)" pointerEvents="none">
+          <g transform={fitViewBoxToBounds(nepalBoundary.viewBox, contentBounds)} pointerEvents="none">
             <path
               d={nepalBoundary.path}
               fill="var(--canvas-fg, var(--foreground))"
@@ -442,28 +631,40 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           </g>
         ) : null}
 
-        {boundaries.filter((boundary) => boundary.visible).map((boundary, index) => (
-          <g key={boundary.id} transform={`translate(90 ${126 + index * 22}) scale(0.82)`} pointerEvents="none">
+        {boundaries.filter((boundary) => boundary.visible).map((boundary) => (
+          <g key={boundary.id} transform={fitViewBoxToBounds(boundary.viewBox, contentBounds)} pointerEvents="none">
             <path d={boundary.path} fill={boundary.fill} stroke={boundary.stroke} strokeWidth="1.5" opacity={boundary.opacity} />
           </g>
         ))}
 
         {(showMapSilhouette || boundaries.some((boundary) => boundary.visible)) ? (
-          <g transform="translate(54 662)" pointerEvents="none">
+          <g transform={`translate(${contentBounds.left} ${contentBounds.bottom + 28})`} pointerEvents="none">
             <rect x="0" y="-13" width="330" height="20" rx="10" fill="var(--canvas-muted, var(--muted))" opacity="0.72" />
             <text x="12" y="0" fill="var(--canvas-fg, var(--muted-foreground))" fontSize="7.5" fontFamily="monospace" opacity="0.72">
-              {showMapSilhouette ? nepalBoundary.attribution : boundaries.find((boundary) => boundary.visible)?.attribution}
+              {backdropAttribution}
             </text>
           </g>
         ) : null}
 
         {showTitleBlock ? (
           <g
-            transform="translate(54 56)"
+            transform={`translate(${titlePosition.x} ${titlePosition.y})`}
             role="button"
             tabIndex={0}
-            className="cursor-pointer outline-none"
+            className="cursor-move outline-none"
             onClick={() => selectObject("project-title")}
+            onPointerDown={(event) => {
+              const point = pointerPosition(event);
+              event.stopPropagation();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              selectObject("project-title");
+              setDragging({
+                id: "project-title",
+                type: "title",
+                offsetX: point ? point.x - titlePosition.x : 0,
+                offsetY: point ? point.y - titlePosition.y : 0,
+              });
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") selectObject("project-title");
             }}
@@ -471,7 +672,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
             <rect x="0" y="0" width="334" height="72" rx="10" fill="var(--canvas-muted, var(--muted))" stroke={selectedObjectId === "project-title" ? "var(--water)" : "var(--canvas-fg, var(--foreground))"} strokeWidth={selectedObjectId === "project-title" ? 2.5 : 1} opacity="0.96" />
             <rect x="0" y="0" width="5" height="72" rx="2.5" fill="var(--trail)" />
             <text x="18" y="30" fill="var(--canvas-fg, var(--foreground))" fontSize="20" fontWeight="800">{project.name}</text>
-            <text x="18" y="51" fill="var(--canvas-fg, var(--muted-foreground))" fontSize="11" fontFamily="monospace" fontWeight="700">
+            <text x="18" y="51" fill="var(--canvas-fg, var(--foreground))" fontSize="11" fontFamily="monospace" fontWeight="700" opacity="0.86">
               {project.subtitle || "Kathmandu to Annapurna Base Camp"}
             </text>
           </g>
@@ -481,46 +682,35 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           const start = positions.get(leg.from);
           const end = positions.get(leg.to);
           if (!start || !end) return null;
-          let path: string;
-          let modeX: number;
-          let modeY: number;
+          let paths: RouteRenderPath[];
           let arrowLabelX: number;
           let arrowLabelY: number;
           if (leg.loopback && leg.from === leg.to) {
             const loop = buildSymbolicLoopPath(start, leg.style);
-            path = loop.path;
-            modeX = loop.modeX;
-            modeY = loop.modeY;
+            paths = [{ path: loop.path, modeX: loop.modeX, modeY: loop.modeY, arrowLabelX: loop.arrowX, arrowLabelY: loop.arrowY }];
             arrowLabelX = loop.arrowX;
             arrowLabelY = loop.arrowY;
           } else {
-            const dx = end.x - start.x;
-            const dy = end.y - start.y;
-            const length = Math.hypot(dx, dy) || 1;
-            const normalX = -dy / length;
-            const normalY = dx / length;
-            const bend = leg.style.curvature * Math.min(120, length * 0.3);
-            const cx = (start.x + end.x) / 2 + normalX * bend;
-            const cy = (start.y + end.y) / 2 + normalY * bend;
-            const startTangentLength = Math.hypot(cx - start.x, cy - start.y) || 1;
-            const endTangentLength = Math.hypot(end.x - cx, end.y - cy) || 1;
-            const routeStart = {
-              x: start.x + ((cx - start.x) / startTangentLength) * 12,
-              y: start.y + ((cy - start.y) / startTangentLength) * 12,
-            };
-            const routeEnd = {
-              x: end.x - ((end.x - cx) / endTangentLength) * 26,
-              y: end.y - ((end.y - cy) / endTangentLength) * 26,
-            };
-            path = buildSymbolicLegPath(routeStart, { x: cx, y: cy }, routeEnd, leg.style);
-            const bezierMid = {
-              x: 0.25 * routeStart.x + 0.5 * cx + 0.25 * routeEnd.x,
-              y: 0.25 * routeStart.y + 0.5 * cy + 0.25 * routeEnd.y,
-            };
-            modeX = bezierMid.x + normalX * (22 + (index % 2) * 12);
-            modeY = bezierMid.y + normalY * (22 + (index % 2) * 12);
-            arrowLabelX = routeEnd.x - normalX * 15;
-            arrowLabelY = routeEnd.y - normalY * 15;
+            const outbound = buildRoutePathInfo(start, end, leg.style, 1);
+            const returnPath = leg.loopback ? buildRoutePathInfo(end, start, leg.style, 1) : null;
+            paths = [
+              {
+                path: outbound.path,
+                modeX: outbound.modeX + (index % 2) * outbound.normalX * 12,
+                modeY: outbound.modeY + (index % 2) * outbound.normalY * 12,
+                arrowLabelX: outbound.arrowLabelX,
+                arrowLabelY: outbound.arrowLabelY,
+              },
+              ...(returnPath ? [{
+                path: returnPath.path,
+                modeX: returnPath.modeX - (index % 2) * outbound.normalX * 12,
+                modeY: returnPath.modeY - (index % 2) * outbound.normalY * 12,
+                arrowLabelX: returnPath.arrowLabelX,
+                arrowLabelY: returnPath.arrowLabelY,
+              }] : []),
+            ];
+            arrowLabelX = outbound.arrowLabelX;
+            arrowLabelY = outbound.arrowLabelY;
           }
           const destinationDay = project.stops.find((stop) => stop.id === leg.to)?.dayLabel;
           const modeIconMap: Record<string, string> = {
@@ -534,22 +724,30 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           const legIconSvg = effectiveIconId ? getIconSvg(effectiveIconId, project.iconAssets) : null;
           const legIconSize = 16 * symbolScale;
           const sizedLegIcon = legIconSvg ? sizeIconSvg(legIconSvg, { width: legIconSize, height: legIconSize, color: canvasFg }) : null;
-          const legColor = transportColor(leg.mode, leg.style.color, vividTransportColors);
+          const legColor = linePathColor ?? transportColor(leg.mode, leg.style.color, vividTransportColors);
+          const showLegArrowhead = showArrowheads !== false && leg.style.showArrowhead !== false;
+          const modeLabel = leg.mode.toUpperCase();
+          const modeFontSize = 8 * textScale;
+          const modePillWidth = Math.max(68, modeLabel.length * modeFontSize * 0.72 + 18);
+          const modePillHeight = Math.max(20, modeFontSize + 10);
           return (
-            <g key={leg.id} onClick={() => selectObject(leg.id)} className="cursor-pointer">
-              {showLineHalo ? <path d={path} fill="none" stroke="var(--card)" strokeWidth={10 * lineScale} strokeLinecap="round" /> : null}
-              <path
-                d={path}
-                fill="none"
-                stroke={legColor}
-                strokeWidth={(selectedObjectId === leg.id ? 5 : 3) * lineScale}
-                strokeDasharray={leg.style.line === "dashed" ? "10 9" : leg.style.line === "dotted" ? "1 7" : undefined}
-                strokeLinecap="round"
-                markerEnd="url(#symbolic-arrow-strong)"
-              />
-              {extraArrowheads ? directionArrowheads(path).map((arrow, arrowIndex) => (
+            <g key={leg.id} onClick={() => selectObject(leg.id)} onDoubleClick={() => requestObjectEdit(leg.id)} className="cursor-pointer">
+              {paths.map((route, pathIndex) => showLineHalo ? <path key={`${leg.id}-halo-${pathIndex}`} d={route.path} fill="none" stroke={lineHaloColor ?? "#ffffff"} strokeWidth={10 * lineScale} strokeLinecap="round" /> : null)}
+              {paths.map((route, pathIndex) => (
                 <path
-                  key={`${leg.id}-arrow-${arrowIndex}`}
+                  key={`${leg.id}-route-${pathIndex}`}
+                  d={route.path}
+                  fill="none"
+                  stroke={legColor}
+                  strokeWidth={(selectedObjectId === leg.id ? 5 : 3) * lineScale}
+                  strokeDasharray={leg.style.line === "dashed" ? "10 9" : leg.style.line === "dotted" ? "1 7" : undefined}
+                  strokeLinecap="round"
+                  markerEnd={showLegArrowhead ? "url(#symbolic-arrow-strong)" : undefined}
+                />
+              ))}
+              {extraArrowheads && showLegArrowhead ? paths.flatMap((route, pathIndex) => directionArrowheads(route.path).map((arrow, arrowIndex) => (
+                <path
+                  key={`${leg.id}-arrow-${pathIndex}-${arrowIndex}`}
                   d={`M${arrow.start.x} ${arrow.start.y} L${arrow.end.x} ${arrow.end.y}`}
                   fill="none"
                   stroke={legColor}
@@ -558,31 +756,34 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
                   markerEnd="url(#symbolic-arrow-strong)"
                   pointerEvents="none"
                 />
-              )) : null}
-              <g
-                transform={`translate(${modeX} ${modeY})`}
-                className="cursor-move"
-                onPointerDown={(event) => {
-                  event.stopPropagation();
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                  setDragging({ id: leg.id, type: "curve" });
-                  selectObject(leg.id);
-                }}
-              >
-                {sizedLegIcon ? (
-                  <>
-                    <rect x={-legIconSize / 2 - 8} y={-legIconSize / 2 - 8} width={legIconSize + 16} height={legIconSize + 16} rx="8" fill="transparent" stroke="transparent" />
-                    <g transform={`translate(${-legIconSize / 2} ${-legIconSize / 2})`} fill="var(--canvas-fg, var(--foreground))" color="var(--canvas-fg, var(--foreground))" pointerEvents="none" dangerouslySetInnerHTML={{ __html: sizedLegIcon }} />
-                  </>
-                ) : (
-                  <>
-                    <rect x="-34" y="-10" width="68" height="20" rx="10" fill="var(--canvas-muted, var(--muted))" stroke={legColor} />
-                    <text textAnchor="middle" y="3" fill="var(--canvas-fg, var(--foreground))" fontSize={8 * textScale} fontFamily="monospace" fontWeight="700">
-                      {leg.mode.toUpperCase()}
-                    </text>
-                  </>
-                )}
-              </g>
+              ))) : null}
+              {paths.map((route, pathIndex) => (
+                <g
+                  key={`${leg.id}-mode-${pathIndex}`}
+                  transform={`translate(${route.modeX} ${route.modeY})`}
+                  className="cursor-move"
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    setDragging({ id: leg.id, type: "curve" });
+                    selectObject(leg.id);
+                  }}
+                >
+                  {sizedLegIcon ? (
+                    <>
+                      <rect x={-legIconSize / 2 - 8} y={-legIconSize / 2 - 8} width={legIconSize + 16} height={legIconSize + 16} rx="8" fill="transparent" stroke="transparent" />
+                      <g transform={`translate(${-legIconSize / 2} ${-legIconSize / 2})`} fill="var(--canvas-fg, var(--foreground))" color="var(--canvas-fg, var(--foreground))" pointerEvents="none" dangerouslySetInnerHTML={{ __html: sizedLegIcon }} />
+                    </>
+                  ) : (
+                    <>
+                      <rect x={-modePillWidth / 2} y={-modePillHeight / 2} width={modePillWidth} height={modePillHeight} rx={modePillHeight / 2} fill="var(--canvas-muted, var(--muted))" stroke={legColor} />
+                      <text textAnchor="middle" y={modeFontSize * 0.35} fill="var(--canvas-fg, var(--foreground))" fontSize={modeFontSize} fontFamily="monospace" fontWeight="700">
+                        {modeLabel}
+                      </text>
+                    </>
+                  )}
+                </g>
+              ))}
               {leg.showDayLabel && destinationDay ? (
                 <g transform={`translate(${arrowLabelX} ${arrowLabelY})`} pointerEvents="none">
                   <rect x="-25" y="-9" width="50" height="16" rx="8" fill="var(--muted)" stroke={legColor} />
@@ -598,7 +799,14 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           if (!position) return null;
           const anchor = stop.labelAnchor === "auto" ? (index % 2 === 0 ? "top" : "bottom") : stop.labelAnchor;
           const iconSvg = getPointIconSvg(stop.icon, project.iconAssets);
-          const sizedIcon = iconSvg ? sizeIconSvg(iconSvg, { width: 20, height: 20 }) : null;
+          const pointStyle = stop.pointStyle;
+          const showFill = pointStyle?.showFill !== false;
+          const showStroke = pointStyle?.showStroke !== false;
+          const pointFill = pointStyle?.fill ?? mutedFromBackground(project.map.background);
+          const strokeColor = pointStyle?.stroke ?? canvasFg;
+          const pointStroke = showStroke ? strokeColor : "none";
+          const iconColor = showFill ? foregroundFromBackground(pointFill) : strokeColor;
+          const sizedIcon = iconSvg ? sizeIconSvg(iconSvg, { width: 20, height: 20, color: iconColor }) : null;
           const endpointRole = index === 0 ? "START" : index === project.stops.length - 1 ? "FINISH" : null;
           const displayedDayLabel = sequentialDayLabels ? `Day ${index + 1}` : stop.dayLabel;
           const markerRadius = emphasizeEndpoints && endpointRole ? 17 : 13;
@@ -632,6 +840,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
               tabIndex={0}
               aria-label={`${stop.name}, ${stop.dayLabel}`}
               onClick={() => selectObject(stop.id)}
+              onDoubleClick={() => requestObjectEdit(stop.id)}
               onPointerDown={(event) => {
                 event.currentTarget.setPointerCapture(event.pointerId);
                 setDragging({ id: stop.id, type: "stop" });
@@ -657,17 +866,17 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
               {emphasizeEndpoints && endpointRole ? (
                 <circle r={markerRadius + 4} fill="none" stroke={endpointRole === "START" ? "#0b73a8" : "#c2410c"} strokeWidth="2.5" />
               ) : null}
-              {stop.pointStyle?.showFill !== false ? (
-              <circle r={markerRadius} fill={stop.pointStyle?.fill ?? "var(--canvas-muted, var(--muted))"} stroke={stop.pointStyle?.showStroke === false ? "none" : stop.pointStyle?.stroke ?? "var(--canvas-fg, var(--trail))"} strokeWidth={stop.pointStyle?.strokeWidth ?? 2.5} />
-              ) : stop.pointStyle?.showStroke !== false ? (
-              <circle r={markerRadius} fill="none" stroke={stop.pointStyle?.stroke ?? "var(--canvas-fg, var(--trail))"} strokeWidth={stop.pointStyle?.strokeWidth ?? 2.5} />
+              {showFill ? (
+              <circle r={markerRadius} fill={pointFill} stroke={pointStroke} strokeWidth={pointStyle?.strokeWidth ?? 2.5} />
+              ) : showStroke ? (
+              <circle r={markerRadius} fill="none" stroke={pointStroke} strokeWidth={pointStyle?.strokeWidth ?? 2.5} />
               ) : null}
               {sizedIcon ? (
-                <g transform="translate(-10 -10)" fill="var(--canvas-fg, var(--trail))" color="var(--canvas-fg, var(--trail))" dangerouslySetInnerHTML={{ __html: sizedIcon }} />
+                <g transform="translate(-10 -10)" fill={iconColor} color={iconColor} dangerouslySetInnerHTML={{ __html: sizedIcon }} />
               ) : null}
               <g transform={`translate(${labelLayout.x + stop.labelOffset[0]} ${labelLayout.y + stop.labelOffset[1]})`}>
                 <rect x={labelLayout.rectX} y={labelLayout.rectY} width={labelWidth} height={labelHeight} rx="4" fill="var(--canvas-muted, var(--muted))" stroke="var(--canvas-fg, var(--muted-foreground))" />
-                <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.nameY} fill={labelStyle.color} fontSize={nameFontSize} fontWeight={labelStyle.bold ? "700" : "500"}>
+                <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.nameY} fill={labelStyle.color === "#18221d" ? "var(--canvas-fg, var(--foreground))" : labelStyle.color} fontSize={nameFontSize} fontWeight={labelStyle.bold ? "700" : "500"}>
                   {stop.name}
                 </text>
                 <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.dayY} fill="var(--canvas-fg, var(--trail))" fontSize={dayFontSize} fontFamily="monospace" fontWeight="800">

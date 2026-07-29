@@ -125,7 +125,16 @@ export function sizeIconSvg(
   svg: string,
   dimensions: { width: number; height: number; x?: number; y?: number; color?: string },
 ) {
-  return sanitizeSvg(svg).replace(/<svg\b([^>]*)>/i, (_match, attributes: string) => {
+  const sanitized = sanitizeSvg(svg);
+  const recolored = dimensions.color
+    ? sanitized
+        .replace(/\sstroke=(?:"(?!none\b)[^"]*"|'(?!none\b)[^']*'|(?!(?:none)\b)[^\s>]+)/gi, ' stroke="currentColor"')
+        .replace(/\sfill=(?:"(?!none\b)[^"]*"|'(?!none\b)[^']*'|(?!(?:none)\b)[^\s>]+)/gi, ' fill="currentColor"')
+        .replace(/stroke\s*:\s*(?!none\b)[^;"']+/gi, "stroke: currentColor")
+        .replace(/fill\s*:\s*(?!none\b)[^;"']+/gi, "fill: currentColor")
+        .replace(/currentColor/gi, dimensions.color)
+    : sanitized;
+  return recolored.replace(/<svg\b([^>]*)>/i, (_match, attributes: string) => {
     const selfClosing = attributes.trimEnd().endsWith("/");
     const cleaned = attributes
       .replace(/\/\s*$/, "")

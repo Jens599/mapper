@@ -1,14 +1,16 @@
 "use client";
 
-import { Copy, Download, Search, Upload } from "lucide-react";
+import { Copy, Download, MapPinned, Search, Upload } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { boundaryFromGeoJson, fetchOsmBoundary } from "@/lib/boundary-utils";
-import type { BoundaryAsset } from "@/lib/project-schema";
+import { getProjectDatabase } from "@/lib/project-database";
+import { parseProject, type BoundaryAsset, type TravelProject } from "@/lib/project-schema";
 import { downloadBlob, safeFilename } from "@/lib/project-io";
+import { useEditorStore } from "@/store/editor-store";
 
 function boundaryTs(boundary: BoundaryAsset) {
   return `// Generated from boundary data. Do not fetch at runtime.\nexport const ${boundary.id.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase()).replace(/^boundary/, "boundary")} = ${JSON.stringify(boundary, null, 2)} as const;\n`;
@@ -18,7 +20,22 @@ function boundarySvg(boundary: BoundaryAsset) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${boundary.viewBox}" role="img" aria-label="${boundary.name}"><path d="${boundary.path}" fill="${boundary.fill}" stroke="${boundary.stroke}" opacity="${boundary.opacity}"/></svg>`;
 }
 
+function appendBoundary(project: TravelProject, boundary: BoundaryAsset): TravelProject {
+  const ids = new Set((project.boundaries ?? []).map((item) => item.id));
+  let id = boundary.id;
+  let index = 2;
+  while (ids.has(id)) {
+    id = `${boundary.id}-${index}`;
+    index += 1;
+  }
+  return {
+    ...project,
+    boundaries: [...(project.boundaries ?? []), { ...boundary, id }],
+  };
+}
+
 export function BoundaryAdmin() {
+  const addBoundaryAsset = useEditorStore((state) => state.addBoundaryAsset);
   const [query, setQuery] = useState("Nepal");
   const [boundary, setBoundary] = useState<BoundaryAsset | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -55,6 +72,34 @@ export function BoundaryAdmin() {
     setStatus("Copied to clipboard.");
   }
 
+  async function saveToProject() {
+    if (!boundary) return;
+    try {
+      const database = getProjectDatabase();
+      const saved = await database.projects.get("active-travel");
+      const storeProject = useEditorStore.getState().project;
+      const baseProject = saved?.project ? parseProject(saved.project) : storeProject;
+      if (baseProject.kind !== "travel") {
+        setStatus("Open or create a travel project before saving this boundary.");
+        return;
+      }
+      const nextProject = appendBoundary(baseProject, boundary);
+      await database.projects.put({
+        id: "active-travel",
+        savedAt: Date.now(),
+        project: nextProject,
+      });
+      if (storeProject.kind === "travel") {
+        useEditorStore.getState().replaceProject(nextProject);
+      } else {
+        addBoundaryAsset(boundary);
+      }
+      setStatus(`${boundary.name} saved to the active travel project.`);
+    } catch (reason) {
+      setStatus(reason instanceof Error ? reason.message : "Boundary save failed.");
+    }
+  }
+
   return (
     <div className="grid gap-6">
       <section className="grid gap-3 rounded-2xl border bg-card p-4 shadow-sm">
@@ -76,13 +121,18 @@ export function BoundaryAdmin() {
 
       {boundary ? (
         <section className="grid gap-4 rounded-2xl border bg-card p-4 shadow-sm">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-terrain">Preview</p>
-            <h2 className="mt-1 text-xl font-extrabold">{boundary.name}</h2>
-            <p className="text-sm text-muted-foreground">{boundary.attribution}</p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-terrain">Preview</p>
+              <h2 className="mt-1 text-xl font-extrabold text-foreground">{boundary.name}</h2>
+              <p className="text-sm text-muted-foreground">{boundary.attribution}</p>
+            </div>
+            <Button onClick={() => void saveToProject()}>
+              <MapPinned aria-hidden="true" /> Save to active project
+            </Button>
           </div>
-          <svg viewBox={boundary.viewBox} className="h-56 w-full rounded-xl border bg-canvas p-4" role="img" aria-label={boundary.name}>
-            <path d={boundary.path} fill={boundary.fill} stroke={boundary.stroke} opacity={0.22} />
+          <svg viewBox={boundary.viewBox} className="h-56 w-full rounded-xl border border-border bg-background p-4 text-terrain" role="img" aria-label={boundary.name}>
+            <path d={boundary.path} fill="currentColor" stroke="#f97316" strokeWidth="1.5" opacity="0.46" />
           </svg>
           <div className="grid gap-3 md:grid-cols-3">
             {[
@@ -92,7 +142,7 @@ export function BoundaryAdmin() {
             ].map(([label, output, filename]) => (
               <div key={label} className="grid gap-2 rounded-xl border bg-background p-3">
                 <p className="text-sm font-bold">{label}</p>
-                <textarea readOnly value={output} className="h-36 resize-none rounded-md border bg-card p-2 font-mono text-[10px]" />
+                <textarea readOnly value={output} className="h-36 resize-none rounded-md border bg-card p-2 font-mono text-[10px] text-foreground" />
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" onClick={() => void copy(output)}><Copy aria-hidden="true" /> Copy</Button>
                   <Button size="sm" variant="outline" onClick={() => downloadBlob(new Blob([output], { type: "text/plain;charset=utf-8" }), filename)}><Download aria-hidden="true" /> Save</Button>
