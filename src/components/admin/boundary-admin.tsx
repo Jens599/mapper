@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { boundaryFromGeoJson, fetchOsmBoundary } from "@/lib/boundary-utils";
-import type { BoundaryAsset } from "@/lib/project-schema";
+import { getProjectDatabase } from "@/lib/project-database";
+import { parseProject, type BoundaryAsset, type TravelProject } from "@/lib/project-schema";
 import { downloadBlob, safeFilename } from "@/lib/project-io";
 import { useEditorStore } from "@/store/editor-store";
 
@@ -17,6 +18,20 @@ function boundaryTs(boundary: BoundaryAsset) {
 
 function boundarySvg(boundary: BoundaryAsset) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${boundary.viewBox}" role="img" aria-label="${boundary.name}"><path d="${boundary.path}" fill="${boundary.fill}" stroke="${boundary.stroke}" opacity="${boundary.opacity}"/></svg>`;
+}
+
+function appendBoundary(project: TravelProject, boundary: BoundaryAsset): TravelProject {
+  const ids = new Set((project.boundaries ?? []).map((item) => item.id));
+  let id = boundary.id;
+  let index = 2;
+  while (ids.has(id)) {
+    id = `${boundary.id}-${index}`;
+    index += 1;
+  }
+  return {
+    ...project,
+    boundaries: [...(project.boundaries ?? []), { ...boundary, id }],
+  };
 }
 
 export function BoundaryAdmin() {
@@ -57,10 +72,32 @@ export function BoundaryAdmin() {
     setStatus("Copied to clipboard.");
   }
 
-  function saveToProject() {
+  async function saveToProject() {
     if (!boundary) return;
-    addBoundaryAsset(boundary);
-    setStatus(`${boundary.name} saved to the active project.`);
+    try {
+      const database = getProjectDatabase();
+      const saved = await database.projects.get("active-travel");
+      const storeProject = useEditorStore.getState().project;
+      const baseProject = saved?.project ? parseProject(saved.project) : storeProject;
+      if (baseProject.kind !== "travel") {
+        setStatus("Open or create a travel project before saving this boundary.");
+        return;
+      }
+      const nextProject = appendBoundary(baseProject, boundary);
+      await database.projects.put({
+        id: "active-travel",
+        savedAt: Date.now(),
+        project: nextProject,
+      });
+      if (storeProject.kind === "travel") {
+        useEditorStore.getState().replaceProject(nextProject);
+      } else {
+        addBoundaryAsset(boundary);
+      }
+      setStatus(`${boundary.name} saved to the active travel project.`);
+    } catch (reason) {
+      setStatus(reason instanceof Error ? reason.message : "Boundary save failed.");
+    }
   }
 
   return (
@@ -90,7 +127,7 @@ export function BoundaryAdmin() {
               <h2 className="mt-1 text-xl font-extrabold text-foreground">{boundary.name}</h2>
               <p className="text-sm text-muted-foreground">{boundary.attribution}</p>
             </div>
-            <Button onClick={saveToProject}>
+            <Button onClick={() => void saveToProject()}>
               <MapPinned aria-hidden="true" /> Save to active project
             </Button>
           </div>

@@ -109,6 +109,8 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
   const [desktop, setDesktop] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [builderWidth, setBuilderWidth] = useState(760);
+  const [editorHeight, setEditorHeight] = useState(480);
+  const editorBodyRef = useRef<HTMLDivElement>(null);
   const userEdited = useRef(false);
 
   useEffect(() => {
@@ -133,6 +135,22 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
+
+  useEffect(() => {
+    if (!open || !editorBodyRef.current) return;
+    const update = () => {
+      const height = editorBodyRef.current?.clientHeight ?? 0;
+      if (height > 0) setEditorHeight(height);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(editorBodyRef.current);
+    window.addEventListener("resize", update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [open, desktop, fullscreen, builderWidth]);
 
   function showHalfScreen() {
     setFullscreen(false);
@@ -217,10 +235,10 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
             {project.id}.mapper.yaml
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-hidden bg-[#1e1e1e]">
+        <div ref={editorBodyRef} className="min-h-0 flex-1 overflow-hidden bg-[#1e1e1e]">
           <CodeMirror
             value={source}
-            height="calc(100dvh - 11rem)"
+            height={`${editorHeight}px`}
             className="size-full"
             theme={vscodeTheme}
             extensions={[
@@ -286,8 +304,8 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
         <DialogContent
           showCloseButton={false}
           className={fullscreen
-            ? "!inset-0 !left-0 !top-0 size-full max-w-none !translate-x-0 !translate-y-0 rounded-none bg-transparent p-0 ring-0"
-            : "!inset-0 !left-0 !top-0 h-full w-full max-w-none !translate-x-0 !translate-y-0 rounded-none bg-transparent p-0 ring-0"}
+            ? "!inset-0 !left-0 !top-0 !flex size-full max-w-none !translate-x-0 !translate-y-0 overflow-hidden rounded-none bg-transparent p-0 ring-0"
+            : "!inset-0 !left-0 !top-0 !flex h-full w-full max-w-none !translate-x-0 !translate-y-0 overflow-hidden rounded-none bg-transparent p-0 ring-0"}
         >
           <DialogTitle className="sr-only">Project builder</DialogTitle>
           <DialogDescription className="sr-only">Edit and validate the active project YAML.</DialogDescription>
