@@ -80,10 +80,10 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
     <>
       <span className="contents" onClick={() => setOpen(true)}>{children}</span>
       {open ? (
-        <div className="fixed inset-0 z-50 flex bg-black/55 text-[#d4d4d4] backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Project builder">
+        <div className="fixed inset-0 z-50 flex h-dvh bg-black/55 text-[#d4d4d4] backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Project builder">
           <div className="hidden min-w-0 flex-1 md:block" onClick={() => setOpen(false)} />
           <section
-            className="flex h-full w-full min-w-0 flex-col border-l border-[#363636] bg-[#171717] shadow-[-18px_0_40px_rgba(0,0,0,0.45)] md:w-[min(58rem,92vw)]"
+            className="grid h-dvh w-full min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto_auto] border-l border-[#363636] bg-[#171717] shadow-[-18px_0_40px_rgba(0,0,0,0.45)] md:w-[min(58rem,92vw)]"
             style={fullscreen ? { width: "100vw" } : undefined}
           >
             <header className="flex min-h-16 shrink-0 items-center gap-3 border-b border-[#303030] bg-[#121212] px-4">
@@ -115,7 +115,7 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-hidden bg-[#1e1e1e]">
+            <div className="min-h-0 overflow-hidden bg-[#1e1e1e]">
               {plainEditor ? (
                 <textarea
                   value={source}
