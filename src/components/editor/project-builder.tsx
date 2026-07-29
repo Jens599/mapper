@@ -75,8 +75,9 @@ function mapperCompletionSource(context: CompletionContext) {
 const vscodeTheme = EditorView.theme(
   {
     "&": { backgroundColor: "#1e1e1e", color: "#d4d4d4", fontSize: "13px", height: "100%" },
+    ".cm-editor": { height: "100%" },
     ".cm-content": { caretColor: "#aeafad", fontFamily: "var(--font-plex-mono), monospace" },
-    ".cm-scroller": { overflow: "auto" },
+    ".cm-scroller": { height: "100%", overflow: "auto" },
     ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#aeafad" },
     ".cm-gutters": { backgroundColor: "#1e1e1e", color: "#858585", border: "none" },
     ".cm-activeLine": { backgroundColor: "#2a2d2e" },
@@ -216,7 +217,7 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
             {project.id}.mapper.yaml
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto bg-[#1e1e1e]">
+        <div className="min-h-0 flex-1 overflow-hidden bg-[#1e1e1e]">
           <CodeMirror
             value={source}
             height="100%"
@@ -241,9 +242,12 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
                   return [];
                 }
               }, { delay: 400 }),
+              EditorView.updateListener.of((update) => {
+                if (!update.docChanged) return;
+                onChange(update.state.doc.toString());
+              }),
               EditorView.lineWrapping,
             ]}
-            onChange={onChange}
             basicSetup={{
               lineNumbers: true,
               foldGutter: true,
