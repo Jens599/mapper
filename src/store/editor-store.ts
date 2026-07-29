@@ -338,7 +338,7 @@ export const useEditorStore = create<EditorState>()(
               formatPainterActive: state.formatPainterActive,
             });
           }
-          if (state.formatPainterActive && applyFormat(state, id)) {
+          if (state.formatPainterActive && applyFormat(state, id) && !state.formatPainterShiftHeld) {
             state.formatPainterActive = false;
             state.formatPainterShiftHeld = false;
           }
@@ -511,8 +511,10 @@ export const useEditorStore = create<EditorState>()(
       set((state) => {
         applied = applyFormat(state, id);
         if (applied) {
-          state.formatPainterActive = false;
-          state.formatPainterShiftHeld = false;
+          if (!state.formatPainterShiftHeld) {
+            state.formatPainterActive = false;
+            state.formatPainterShiftHeld = false;
+          }
           state.selectedObjectId = id;
           state.selectedIds = [id];
         }
