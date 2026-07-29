@@ -181,12 +181,122 @@ function directionArrowheads(path: string) {
   });
 }
 
+type Bounds = { left: number; right: number; top: number; bottom: number };
+
+function boundsFromPoints(points: Array<{ x: number; y: number }>): Bounds | null {
+  if (!points.length) return null;
+  return {
+    left: Math.min(...points.map((point) => point.x)),
+    right: Math.max(...points.map((point) => point.x)),
+    top: Math.min(...points.map((point) => point.y)),
+    bottom: Math.max(...points.map((point) => point.y)),
+  };
+}
+
+function collectContentPoints(
+  project: TravelProject,
+  positions: Map<string, { x: number; y: number }>,
+  symbolScale: number,
+  showTitleBlock: boolean,
+  titlePosition: { x: number; y: number },
+) {
+  const points = project.stops
+    .filter((stop) => stop.visible)
+    .flatMap((stop) => {
+      const position = positions.get(stop.id);
+      return position
+        ? [
+            { x: position.x - 88, y: position.y - 55 },
+            { x: position.x + 88, y: position.y + 55 },
+          ]
+        : [];
+    });
+  for (const leg of project.legs.filter((item) => item.visible)) {
+    const start = positions.get(leg.from);
+    const end = positions.get(leg.to);
+    if (!start || !end) continue;
+    if (leg.loopback && leg.from === leg.to) {
+      const radius = Math.min(190, 48 + Math.abs(leg.style.curvature) * 14);
+      points.push(
+        { x: start.x - radius - 55, y: start.y - radius * 2 - 55 },
+        { x: start.x + radius + 55, y: start.y + radius * 2 + 55 },
+      );
+      continue;
+    }
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const bend = leg.style.curvature * Math.min(120, length * 0.3);
+    const margin = 48 + Math.abs(leg.style.winding) * 12 + Math.abs(leg.style.noiseAmplitude) * 34;
+    const control = {
+      x: (start.x + end.x) / 2 + (-dy / length) * bend,
+      y: (start.y + end.y) / 2 + (dx / length) * bend,
+    };
+    points.push(start, end, { x: control.x - margin, y: control.y - margin }, { x: control.x + margin, y: control.y + margin });
+  }
+  for (const symbol of project.symbols.filter((item) => item.visible)) {
+    const point = symbol.diagramPosition ?? geographicToSymbolic(project, symbol.coordinates);
+    const radius = 20 * symbol.scale * symbolScale;
+    points.push({ x: point.x - radius, y: point.y - radius }, { x: point.x + radius, y: point.y + radius });
+  }
+  for (const scatter of project.scatter.filter((item) => item.visible)) {
+    for (const placement of generateTravelScatter(project, scatter)) {
+      const point = symbolicScatterPosition(project, scatter, placement.coordinates, positions);
+      const radius = 20 * placement.scale * symbolScale;
+      points.push({ x: point.x - radius, y: point.y - radius }, { x: point.x + radius, y: point.y + radius });
+    }
+  }
+  if (showTitleBlock) {
+    points.push({ x: titlePosition.x - 20, y: titlePosition.y - 20 }, { x: titlePosition.x + 354, y: titlePosition.y + 92 });
+  }
+  return points;
+}
+
+function fitViewBoxToBounds(viewBox: string, bounds: Bounds) {
+  const [sourceX, sourceY, sourceWidth, sourceHeight] = viewBox.split(/\s+/).map(Number);
+  if (![sourceX, sourceY, sourceWidth, sourceHeight].every(Number.isFinite) || sourceWidth <= 0 || sourceHeight <= 0) return "";
+  const targetWidth = Math.max((bounds.right - bounds.left) * 1.18, 560);
+  const targetHeight = Math.max((bounds.bottom - bounds.top) * 1.18, 260);
+  const scale = Math.min(targetWidth / sourceWidth, targetHeight / sourceHeight);
+  const centerX = (bounds.left + bounds.right) / 2;
+  const centerY = (bounds.top + bounds.bottom) / 2;
+  const translateX = centerX - (sourceWidth * scale) / 2 - sourceX * scale;
+  const translateY = centerY - (sourceHeight * scale) / 2 - sourceY * scale;
+  return `translate(${translateX.toFixed(1)} ${translateY.toFixed(1)}) scale(${scale.toFixed(4)})`;
+}
+
+function overlapArea(a: Bounds, b: Bounds) {
+  return Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+}
+
+function stopLabelBounds(
+  stop: TravelProject["stops"][number],
+  position: { x: number; y: number },
+  anchor: "top" | "right" | "bottom" | "left",
+  textScale: number,
+  largerDayText: boolean,
+) {
+  const labelStyle = stop.labelStyle ?? { fontSize: 1, color: "#18221d", bold: true };
+  const nameFontSize = 12 * textScale * labelStyle.fontSize;
+  const dayFontSize = (largerDayText ? 10.5 : 9) * textScale * labelStyle.fontSize;
+  const labelWidth = Math.max(144, stop.name.length * nameFontSize * 0.62 + 28, stop.dayLabel.length * dayFontSize * 0.68 + 28);
+  const labelHeight = Math.max(34, nameFontSize + dayFontSize + 14);
+  const labelGap = 23;
+  const offsetX = stop.labelOffset?.[0] ?? 0;
+  const offsetY = stop.labelOffset?.[1] ?? 0;
+  if (anchor === "top") return { left: position.x - labelWidth / 2 + offsetX, right: position.x + labelWidth / 2 + offsetX, top: position.y - labelGap - labelHeight + offsetY, bottom: position.y - labelGap + offsetY };
+  if (anchor === "bottom") return { left: position.x - labelWidth / 2 + offsetX, right: position.x + labelWidth / 2 + offsetX, top: position.y + labelGap + offsetY, bottom: position.y + labelGap + labelHeight + offsetY };
+  if (anchor === "right") return { left: position.x + labelGap + offsetX, right: position.x + labelGap + labelWidth + offsetX, top: position.y - labelHeight / 2 + offsetY, bottom: position.y + labelHeight / 2 + offsetY };
+  return { left: position.x - labelGap - labelWidth + offsetX, right: position.x - labelGap + offsetX, top: position.y - labelHeight / 2 + offsetY, bottom: position.y + labelHeight / 2 + offsetY };
+}
+
 export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const selectObject = useEditorStore((state) => state.selectObject);
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
   const moveSymbolicStop = useEditorStore((state) => state.moveSymbolicStop);
   const moveSymbolicSymbol = useEditorStore((state) => state.moveSymbolicSymbol);
   const moveProjectTitle = useEditorStore((state) => state.moveProjectTitle);
+  const updateTravelStop = useEditorStore((state) => state.updateTravelStop);
   const updateLegStyle = useEditorStore((state) => state.updateLegStyle);
   const resetSymbolicLayout = useEditorStore((state) => state.resetSymbolicLayout);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -207,6 +317,8 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
     textScale: rawTextScale,
     symbolScale: rawSymbolScale,
     arrowheadScale: rawArrowheadScale,
+    lineHaloColor,
+    linePathColor,
     showLineHalo,
     showLegend,
     showTitleBlock,
@@ -233,6 +345,8 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const canvasMuted = mutedFromBackground(project.map.background);
   const boundaries = project.boundaries ?? [];
   const titlePosition = project.presentation.titlePosition ?? { x: 54, y: 56 };
+  const contentBounds = boundsFromPoints(collectContentPoints(project, positions, symbolScale, showTitleBlock, titlePosition)) ?? { left: 90, right: 910, top: 86, bottom: 614 };
+  const backdropAttribution = showMapSilhouette ? nepalBoundary.attribution : boundaries.find((boundary) => boundary.visible)?.attribution;
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -256,71 +370,11 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   }
 
   function fitToScreen() {
-    const points = project.stops
-      .filter((stop) => stop.visible)
-      .flatMap((stop) => {
-        const position = positions.get(stop.id);
-        return position
-          ? [
-              { x: position.x - 88, y: position.y - 55 },
-              { x: position.x + 88, y: position.y + 55 },
-            ]
-          : [];
-      });
-    for (const leg of project.legs.filter((item) => item.visible)) {
-      const start = positions.get(leg.from);
-      const end = positions.get(leg.to);
-      if (!start || !end) continue;
-      if (leg.loopback && leg.from === leg.to) {
-        const radius = Math.min(190, 48 + Math.abs(leg.style.curvature) * 14);
-        points.push(
-          { x: start.x - radius - 55, y: start.y - radius * 2 - 55 },
-          { x: start.x + radius + 55, y: start.y + radius * 2 + 55 },
-        );
-        continue;
-      }
-      const dx = end.x - start.x;
-      const dy = end.y - start.y;
-      const length = Math.hypot(dx, dy) || 1;
-      const bend = leg.style.curvature * Math.min(120, length * 0.3);
-      const margin = 48 + Math.abs(leg.style.winding) * 12 + Math.abs(leg.style.noiseAmplitude) * 34;
-      const control = {
-        x: (start.x + end.x) / 2 + (-dy / length) * bend,
-        y: (start.y + end.y) / 2 + (dx / length) * bend,
-      };
-      points.push(
-        start,
-        end,
-        { x: control.x - margin, y: control.y - margin },
-        { x: control.x + margin, y: control.y + margin },
-      );
-    }
-    for (const symbol of project.symbols.filter((item) => item.visible)) {
-      const point = symbol.diagramPosition ?? geographicToSymbolic(project, symbol.coordinates);
-      const radius = 20 * symbol.scale * symbolScale;
-      points.push({ x: point.x - radius, y: point.y - radius }, { x: point.x + radius, y: point.y + radius });
-    }
-    for (const scatter of project.scatter.filter((item) => item.visible)) {
-      for (const placement of generateTravelScatter(project, scatter)) {
-        const point = symbolicScatterPosition(project, scatter, placement.coordinates, positions);
-        const radius = 20 * placement.scale * symbolScale;
-        points.push({ x: point.x - radius, y: point.y - radius }, { x: point.x + radius, y: point.y + radius });
-      }
-    }
-    if (showTitleBlock) {
-      points.push(
-        { x: titlePosition.x - 20, y: titlePosition.y - 20 },
-        { x: titlePosition.x + 354, y: titlePosition.y + 92 },
-      );
-    }
-    if (!points.length) {
+    if (!contentBounds) {
       setViewport({ centerX: 500, centerY: 350, zoom: 1 });
       return;
     }
-    const left = Math.min(...points.map((point) => point.x));
-    const right = Math.max(...points.map((point) => point.x));
-    const top = Math.min(...points.map((point) => point.y));
-    const bottom = Math.max(...points.map((point) => point.y));
+    const { left, right, top, bottom } = contentBounds;
     setViewport({
       centerX: (left + right) / 2,
       centerY: (top + bottom) / 2,
@@ -336,6 +390,42 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
     point.x = event.clientX;
     point.y = event.clientY;
     return point.matrixTransform(matrix.inverse());
+  }
+
+  function moveLabelToLeastCoveredArea(stopId: string) {
+    const currentProject = useEditorStore.getState().project;
+    if (currentProject.kind !== "travel") return;
+    const currentPositions = getSymbolicStopPositions(currentProject);
+    const stop = currentProject.stops.find((item) => item.id === stopId);
+    const position = currentPositions.get(stopId);
+    if (!stop || !position) return;
+    const currentBounds = boundsFromPoints(collectContentPoints(currentProject, currentPositions, symbolScale, showTitleBlock, currentProject.presentation.titlePosition ?? { x: 54, y: 56 })) ?? contentBounds;
+    const candidates = ["top", "right", "bottom", "left"] as const;
+    const obstacles = currentProject.stops.filter((item) => item.visible && item.id !== stopId).flatMap((other, index) => {
+      const otherPosition = currentPositions.get(other.id);
+      if (!otherPosition) return [];
+      const anchor = other.labelAnchor === "auto" ? (index % 2 === 0 ? "top" : "bottom") : other.labelAnchor;
+      return [
+        { left: otherPosition.x - 22, right: otherPosition.x + 22, top: otherPosition.y - 22, bottom: otherPosition.y + 22 },
+        stopLabelBounds(other, otherPosition, anchor, textScale, largerDayText),
+      ];
+    });
+    for (const leg of currentProject.legs.filter((item) => item.visible)) {
+      const start = currentPositions.get(leg.from);
+      const end = currentPositions.get(leg.to);
+      if (!start || !end) continue;
+      const routeBounds = boundsFromPoints([start, end]);
+      if (routeBounds) obstacles.push({ left: routeBounds.left - 18, right: routeBounds.right + 18, top: routeBounds.top - 18, bottom: routeBounds.bottom + 18 });
+    }
+    const best = candidates
+      .map((anchor) => {
+        const bounds = stopLabelBounds({ ...stop, labelOffset: [0, 0] }, position, anchor, textScale, largerDayText);
+        const overlap = obstacles.reduce((total, obstacle) => total + overlapArea(bounds, obstacle), 0);
+        const overflow = overlapArea(bounds, { left: -10_000, right: currentBounds.left, top: -10_000, bottom: 10_000 }) + overlapArea(bounds, { left: currentBounds.right, right: 10_000, top: -10_000, bottom: 10_000 });
+        return { anchor, score: overlap * 100 + overflow };
+      })
+      .sort((a, b) => a.score - b.score)[0];
+    if (best) updateTravelStop(stop.id, { labelAnchor: best.anchor, labelOffset: [0, 0] });
   }
 
   return (
@@ -420,6 +510,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           }
         }}
         onPointerUp={() => {
+          if (dragging?.type === "stop") moveLabelToLeastCoveredArea(dragging.id);
           setDragging(null);
           setPanning(null);
         }}
@@ -443,7 +534,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
         </defs>
 
         {showMapSilhouette ? (
-          <g transform="translate(90 104) scale(0.82)" pointerEvents="none">
+          <g transform={fitViewBoxToBounds(nepalBoundary.viewBox, contentBounds)} pointerEvents="none">
             <path
               d={nepalBoundary.path}
               fill="var(--canvas-fg, var(--foreground))"
@@ -459,17 +550,17 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           </g>
         ) : null}
 
-        {boundaries.filter((boundary) => boundary.visible).map((boundary, index) => (
-          <g key={boundary.id} transform={`translate(90 ${126 + index * 22}) scale(0.82)`} pointerEvents="none">
+        {boundaries.filter((boundary) => boundary.visible).map((boundary) => (
+          <g key={boundary.id} transform={fitViewBoxToBounds(boundary.viewBox, contentBounds)} pointerEvents="none">
             <path d={boundary.path} fill={boundary.fill} stroke={boundary.stroke} strokeWidth="1.5" opacity={boundary.opacity} />
           </g>
         ))}
 
         {(showMapSilhouette || boundaries.some((boundary) => boundary.visible)) ? (
-          <g transform="translate(54 662)" pointerEvents="none">
+          <g transform={`translate(${contentBounds.left} ${contentBounds.bottom + 28})`} pointerEvents="none">
             <rect x="0" y="-13" width="330" height="20" rx="10" fill="var(--canvas-muted, var(--muted))" opacity="0.72" />
             <text x="12" y="0" fill="var(--canvas-fg, var(--muted-foreground))" fontSize="7.5" fontFamily="monospace" opacity="0.72">
-              {showMapSilhouette ? nepalBoundary.attribution : boundaries.find((boundary) => boundary.visible)?.attribution}
+              {backdropAttribution}
             </text>
           </g>
         ) : null}
@@ -563,14 +654,14 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           const legIconSvg = effectiveIconId ? getIconSvg(effectiveIconId, project.iconAssets) : null;
           const legIconSize = 16 * symbolScale;
           const sizedLegIcon = legIconSvg ? sizeIconSvg(legIconSvg, { width: legIconSize, height: legIconSize, color: canvasFg }) : null;
-          const legColor = transportColor(leg.mode, leg.style.color, vividTransportColors);
+          const legColor = linePathColor ?? transportColor(leg.mode, leg.style.color, vividTransportColors);
           const modeLabel = leg.mode.toUpperCase();
           const modeFontSize = 8 * textScale;
           const modePillWidth = Math.max(68, modeLabel.length * modeFontSize * 0.72 + 18);
           const modePillHeight = Math.max(20, modeFontSize + 10);
           return (
             <g key={leg.id} onClick={() => selectObject(leg.id)} className="cursor-pointer">
-              {showLineHalo ? <path d={path} fill="none" stroke="var(--card)" strokeWidth={10 * lineScale} strokeLinecap="round" /> : null}
+              {showLineHalo ? <path d={path} fill="none" stroke={lineHaloColor ?? "#ffffff"} strokeWidth={10 * lineScale} strokeLinecap="round" /> : null}
               <path
                 d={path}
                 fill="none"

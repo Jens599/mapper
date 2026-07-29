@@ -45,7 +45,7 @@ export type NewTravelLeg = {
  };
 
 export type TravelStopUpdate = Partial<
-  Pick<TravelProject["stops"][number], "name" | "dayLabel" | "coordinates" | "elevation" | "labelAnchor" | "labelStyle" | "pointStyle">
+  Pick<TravelProject["stops"][number], "name" | "dayLabel" | "coordinates" | "elevation" | "labelOffset" | "labelAnchor" | "labelStyle" | "pointStyle">
 >;
 
 export type TravelLegUpdate = Partial<
@@ -593,6 +593,7 @@ export const useEditorStore = create<EditorState>()(
           ];
         }
         if ("elevation" in update) stop.elevation = update.elevation;
+        if (update.labelOffset?.every(Number.isFinite)) stop.labelOffset = update.labelOffset;
         if (update.labelAnchor) stop.labelAnchor = update.labelAnchor;
         if (update.labelStyle) {
           ensureStopStyleDefaults(stop);
@@ -841,6 +842,7 @@ export const useEditorStore = create<EditorState>()(
           textScale: 1,
           symbolScale: 1,
           arrowheadScale: 1,
+          lineHaloColor: "#ffffff",
           showModeIcons: false,
           showLineHalo: true,
           showLegend: false,

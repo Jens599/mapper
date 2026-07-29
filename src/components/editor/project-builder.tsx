@@ -1,13 +1,7 @@
 "use client";
 
-import { autocompletion, type CompletionContext } from "@codemirror/autocomplete";
-import { yaml } from "@codemirror/lang-yaml";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { linter } from "@codemirror/lint";
-import { EditorView } from "@codemirror/view";
-import { tags } from "@lezer/highlight";
+import Editor, { type OnMount } from "@monaco-editor/react";
 import { Columns2, FileCode2, Maximize2, X } from "lucide-react";
-import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -25,79 +19,8 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { deserializeProject, serializeProject } from "@/lib/project-io";
-import { getIconIds } from "@/lib/icons";
+import { configureMapperMonaco } from "@/lib/monaco-setup";
 import { useEditorStore } from "@/store/editor-store";
-
-const CodeMirror = dynamic(() => import("@uiw/react-codemirror"), {
-  ssr: false,
-});
-
-const mapperCompletions = [
-  "version", "kind", "id", "name", "durationDays", "subtitle", "presentation",
-  "lineScale", "textScale", "symbolScale", "arrowheadScale", "showModeIcons", "showLineHalo", "showLegend",
-  "showTitleBlock", "showMapSilhouette", "showLeaderLines", "emphasizeEndpoints",
-  "sequentialDayLabels", "extraArrowheads", "vividTransportColors", "fillCanvas",
-  "largerDayText", "titlePosition", "map", "display", "style",
-  "showContours", "showHillshade", "contourInterval", "elevationUnits", "background",
-  "stops", "coordinates", "dayLabel", "icon", "elevation", "labelOffset", "labelAnchor",
-  "labelStyle", "pointStyle", "fontSize", "bold", "color", "fill", "showFill", "stroke",
-  "showStroke", "strokeWidth", "diagramPosition", "x", "y", "legs", "from",
-  "to", "mode", "loopback", "showDayLabel", "iconId", "via", "corridor", "corridorNoise", "page",
-  "line", "solid", "dashed", "dotted", "curvature", "winding",
-  "noiseSeed", "noiseAmplitude", "noiseScale", "noiseOctaves", "noiseModulation",
-  "noise", "enabled", "iconAssets",
-  "symbols", "scatter", "seed", "count", "minSpacingKm", "minSpacing", "region",
-  "type", "trip-bounds", "map-edge", "north", "south", "east", "west",
-  "around-stop", "stopId", "along-leg", "legId", "bounds",
-  "padding", "radius", "appearance", "scale", "rotation",
-  "boundaries", "source", "attribution", "viewBox", "path", "opacity",
-  "canvas", "canvas-edge", "top", "bottom", "left", "right", "around-waypoint",
-  "waypointId", "along-route", "routeId", "rectangle",
-  "waypoints", "routes", "terrain", "icons", "visible",
-].map((label) => ({ label, type: "property" }));
-
-const iconCompletions = getIconIds().map((id) => ({ label: id, type: "constant" }));
-
-function iconValueCompletionSource(context: CompletionContext) {
-  const word = context.matchBefore(/[\w-]*/);
-  if (!word || (word.from === word.to && !context.explicit)) return null;
-  const lineBefore = context.state.sliceDoc(Math.max(0, word.from - 25), word.from);
-  if (!/(?:^|\n)\s*(?:icon|iconId|icons):\s*$/.test(lineBefore)) return null;
-  return { from: word.from, options: iconCompletions };
-}
-
-function mapperCompletionSource(context: CompletionContext) {
-  const word = context.matchBefore(/[\w-]*/);
-  if (!word || (word.from === word.to && !context.explicit)) return null;
-  return { from: word.from, options: mapperCompletions };
-}
-
-const vscodeTheme = EditorView.theme(
-  {
-    "&": { backgroundColor: "#1e1e1e", color: "#d4d4d4", fontSize: "13px", height: "100%" },
-    "&.cm-editor": { height: "100%" },
-    ".cm-content": { caretColor: "#aeafad", fontFamily: "var(--font-plex-mono), monospace" },
-    ".cm-scroller": { height: "100%", overflow: "auto !important" },
-    ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#aeafad" },
-    ".cm-gutters": { backgroundColor: "#1e1e1e", color: "#858585", border: "none" },
-    ".cm-activeLine": { backgroundColor: "#2a2d2e" },
-    ".cm-activeLineGutter": { backgroundColor: "#2a2d2e", color: "#c6c6c6" },
-    ".cm-selectionBackground": { backgroundColor: "#264f78 !important" },
-    ".cm-tooltip": { backgroundColor: "#252526", border: "1px solid #454545" },
-    ".cm-tooltip-autocomplete > ul > li[aria-selected]": { backgroundColor: "#04395e" },
-  },
-  { dark: true },
-);
-
-const accessibleYamlHighlight = HighlightStyle.define([
-  { tag: [tags.propertyName, tags.attributeName], color: "#9cdcfe" },
-  { tag: [tags.string, tags.special(tags.string)], color: "#f0b7a4" },
-  { tag: [tags.number, tags.bool, tags.null], color: "#b5d6a2" },
-  { tag: [tags.keyword, tags.atom], color: "#c7a0dc" },
-  { tag: [tags.comment, tags.lineComment, tags.blockComment], color: "#86b778" },
-  { tag: [tags.punctuation, tags.separator, tags.bracket], color: "#d4d4d4" },
-  { tag: tags.invalid, color: "#ff9b9b", textDecoration: "underline" },
-]);
 
 export function ProjectBuilder({ children }: { children: React.ReactNode }) {
   const project = useEditorStore((state) => state.project);
@@ -203,6 +126,11 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
     userEdited.current = true;
   }, []);
 
+  const handleEditorMount = useCallback<OnMount>((editor, monaco) => {
+    configureMapperMonaco(monaco);
+    editor.layout();
+  }, []);
+
   const workspace = (
     <div className="flex size-full min-h-0 flex-col bg-[#1e1e1e] text-[#d4d4d4]">
       <div className="flex min-h-14 shrink-0 items-center gap-3 border-b border-[#2b2b2b] bg-[#181818] px-4 pr-3">
@@ -236,41 +164,35 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <div ref={editorBodyRef} className="min-h-0 flex-1 overflow-hidden bg-[#1e1e1e]">
-          <CodeMirror
+          <Editor
             value={source}
             height={`${editorHeight}px`}
-            className="size-full"
-            theme={vscodeTheme}
-            extensions={[
-              yaml(),
-              syntaxHighlighting(accessibleYamlHighlight),
-              autocompletion({ override: [iconValueCompletionSource, mapperCompletionSource] }),
-              linter((view) => {
-                try {
-                  const message = getProjectError(view.state.doc.toString());
-                  if (!message) return [];
-                  return [
-                    {
-                      from: 0,
-                      to: view.state.doc.length,
-                      severity: "error",
-                      message,
-                    },
-                  ];
-                } catch {
-                  return [];
-                }
-              }, { delay: 400 }),
-              EditorView.updateListener.of((update) => {
-                if (!update.docChanged) return;
-                onChange(update.state.doc.toString());
-              }),
-              EditorView.lineWrapping,
-            ]}
-            basicSetup={{
-              lineNumbers: true,
-              foldGutter: true,
-              highlightActiveLine: true,
+            language="yaml"
+            path={`${project.id}.mapper.yaml`}
+            theme="mapper-dark"
+            beforeMount={configureMapperMonaco}
+            onMount={handleEditorMount}
+            onChange={(value) => onChange(value ?? "")}
+            options={{
+              automaticLayout: true,
+              fontFamily: "var(--font-plex-mono), Consolas, monospace",
+              fontSize: 13,
+              lineNumbers: "on",
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              smoothScrolling: true,
+              tabSize: 2,
+              insertSpaces: true,
+              wordWrap: "off",
+              wrappingIndent: "none",
+              scrollbar: {
+                vertical: "visible",
+                horizontal: "visible",
+                useShadows: false,
+              },
+              overviewRulerLanes: 0,
+              renderLineHighlight: "line",
+              fixedOverflowWidgets: true,
             }}
           />
         </div>

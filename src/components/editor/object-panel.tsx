@@ -722,6 +722,32 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
               />
             </div>
           </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor={`${idPrefix}line-halo-color`}>Line background color</Label>
+            <div className="flex items-center gap-2">
+              <input
+                id={`${idPrefix}line-halo-color`}
+                type="color"
+                value={presentation.lineHaloColor ?? "#ffffff"}
+                onChange={(event) => updatePresentation("lineHaloColor", event.currentTarget.value)}
+                className="size-7 cursor-pointer rounded border bg-transparent p-0.5"
+              />
+              <span className="font-mono text-xs text-muted-foreground">{presentation.lineHaloColor ?? "#ffffff"}</span>
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor={`${idPrefix}line-path-color`}>Route line color</Label>
+            <div className="flex items-center gap-2">
+              <input
+                id={`${idPrefix}line-path-color`}
+                type="color"
+                value={presentation.linePathColor ?? "#18221d"}
+                onChange={(event) => updatePresentation("linePathColor", event.currentTarget.value)}
+                className="size-7 cursor-pointer rounded border bg-transparent p-0.5"
+              />
+              <span className="font-mono text-xs text-muted-foreground">{presentation.linePathColor ?? "auto"}</span>
+            </div>
+          </div>
           <label className="flex min-h-8 items-center justify-between gap-3 text-sm">
             Transport icons
             <Switch
