@@ -290,6 +290,57 @@ function stopLabelBounds(
   return { left: position.x - labelGap - labelWidth + offsetX, right: position.x - labelGap + offsetX, top: position.y - labelHeight / 2 + offsetY, bottom: position.y + labelHeight / 2 + offsetY };
 }
 
+function buildRoutePathInfo(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  style: TravelProject["legs"][number]["style"],
+  curvatureMultiplier = 1,
+) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const normalX = -dy / length;
+  const normalY = dx / length;
+  const bend = style.curvature * curvatureMultiplier * Math.min(120, length * 0.3);
+  const cx = (start.x + end.x) / 2 + normalX * bend;
+  const cy = (start.y + end.y) / 2 + normalY * bend;
+  const startTangentLength = Math.hypot(cx - start.x, cy - start.y) || 1;
+  const endTangentLength = Math.hypot(end.x - cx, end.y - cy) || 1;
+  const routeStart = {
+    x: start.x + ((cx - start.x) / startTangentLength) * 12,
+    y: start.y + ((cy - start.y) / startTangentLength) * 12,
+  };
+  const routeEnd = {
+    x: end.x - ((end.x - cx) / endTangentLength) * 26,
+    y: end.y - ((end.y - cy) / endTangentLength) * 26,
+  };
+  const mid = {
+    x: 0.25 * routeStart.x + 0.5 * cx + 0.25 * routeEnd.x,
+    y: 0.25 * routeStart.y + 0.5 * cy + 0.25 * routeEnd.y,
+  };
+  return {
+    path: buildSymbolicLegPath(routeStart, { x: cx, y: cy }, routeEnd, style),
+    normalX,
+    normalY,
+    modeX: mid.x + normalX * 22,
+    modeY: mid.y + normalY * 22,
+    arrowLabelX: routeEnd.x - normalX * 15,
+    arrowLabelY: routeEnd.y - normalY * 15,
+  };
+}
+
+function pathObstacleBounds(path: string) {
+  return pathPoints(path).flatMap((point, index, points) => {
+    if (index % 4 !== 0 && index !== points.length - 1) return [];
+    const radius = index > points.length - 6 ? 24 : 12;
+    return [{ left: point.x - radius, right: point.x + radius, top: point.y - radius, bottom: point.y + radius }];
+  });
+}
+
+function requestObjectEdit(id: string) {
+  window.dispatchEvent(new CustomEvent("mapper:edit-object", { detail: { id } }));
+}
+
 export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const selectObject = useEditorStore((state) => state.selectObject);
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
@@ -319,6 +370,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
     arrowheadScale: rawArrowheadScale,
     lineHaloColor,
     linePathColor,
+    showArrowheads,
     showLineHalo,
     showLegend,
     showTitleBlock,
@@ -333,7 +385,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const lineScale = Number.isFinite(rawLineScale) ? rawLineScale : 1;
   const textScale = Number.isFinite(rawTextScale) ? rawTextScale : 1;
   const symbolScale = Number.isFinite(rawSymbolScale) ? rawSymbolScale : 1;
-  const arrowheadScale = Number.isFinite(rawArrowheadScale) ? rawArrowheadScale : 1;
+  const arrowheadScale = Number.isFinite(rawArrowheadScale) ? rawArrowheadScale : 0.5;
   const legendItems: Array<[string, string, string | undefined]> = [
     ["Flight", transportColor("flight", "#216b8b", vividTransportColors), "8 6"],
     ["Drive", transportColor("drive", "#202b25", vividTransportColors), undefined],
@@ -414,8 +466,13 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
       const start = currentPositions.get(leg.from);
       const end = currentPositions.get(leg.to);
       if (!start || !end) continue;
-      const routeBounds = boundsFromPoints([start, end]);
-      if (routeBounds) obstacles.push({ left: routeBounds.left - 18, right: routeBounds.right + 18, top: routeBounds.top - 18, bottom: routeBounds.bottom + 18 });
+      if (leg.loopback && leg.from === leg.to) {
+        obstacles.push(...pathObstacleBounds(buildSymbolicLoopPath(start, leg.style).path));
+      } else {
+        const outbound = buildRoutePathInfo(start, end, leg.style, 1).path;
+        obstacles.push(...pathObstacleBounds(outbound));
+        if (leg.loopback) obstacles.push(...pathObstacleBounds(buildRoutePathInfo(end, start, leg.style, 1).path));
+      }
     }
     const best = candidates
       .map((anchor) => {
@@ -591,7 +648,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
             <rect x="0" y="0" width="334" height="72" rx="10" fill="var(--canvas-muted, var(--muted))" stroke={selectedObjectId === "project-title" ? "var(--water)" : "var(--canvas-fg, var(--foreground))"} strokeWidth={selectedObjectId === "project-title" ? 2.5 : 1} opacity="0.96" />
             <rect x="0" y="0" width="5" height="72" rx="2.5" fill="var(--trail)" />
             <text x="18" y="30" fill="var(--canvas-fg, var(--foreground))" fontSize="20" fontWeight="800">{project.name}</text>
-            <text x="18" y="51" fill="var(--canvas-fg, var(--muted-foreground))" fontSize="11" fontFamily="monospace" fontWeight="700">
+            <text x="18" y="51" fill="var(--canvas-fg, var(--foreground))" fontSize="11" fontFamily="monospace" fontWeight="700" opacity="0.86">
               {project.subtitle || "Kathmandu to Annapurna Base Camp"}
             </text>
           </g>
@@ -601,46 +658,26 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           const start = positions.get(leg.from);
           const end = positions.get(leg.to);
           if (!start || !end) return null;
-          let path: string;
+          let paths: string[];
           let modeX: number;
           let modeY: number;
           let arrowLabelX: number;
           let arrowLabelY: number;
           if (leg.loopback && leg.from === leg.to) {
             const loop = buildSymbolicLoopPath(start, leg.style);
-            path = loop.path;
+            paths = [loop.path];
             modeX = loop.modeX;
             modeY = loop.modeY;
             arrowLabelX = loop.arrowX;
             arrowLabelY = loop.arrowY;
           } else {
-            const dx = end.x - start.x;
-            const dy = end.y - start.y;
-            const length = Math.hypot(dx, dy) || 1;
-            const normalX = -dy / length;
-            const normalY = dx / length;
-            const bend = leg.style.curvature * Math.min(120, length * 0.3);
-            const cx = (start.x + end.x) / 2 + normalX * bend;
-            const cy = (start.y + end.y) / 2 + normalY * bend;
-            const startTangentLength = Math.hypot(cx - start.x, cy - start.y) || 1;
-            const endTangentLength = Math.hypot(end.x - cx, end.y - cy) || 1;
-            const routeStart = {
-              x: start.x + ((cx - start.x) / startTangentLength) * 12,
-              y: start.y + ((cy - start.y) / startTangentLength) * 12,
-            };
-            const routeEnd = {
-              x: end.x - ((end.x - cx) / endTangentLength) * 26,
-              y: end.y - ((end.y - cy) / endTangentLength) * 26,
-            };
-            path = buildSymbolicLegPath(routeStart, { x: cx, y: cy }, routeEnd, leg.style);
-            const bezierMid = {
-              x: 0.25 * routeStart.x + 0.5 * cx + 0.25 * routeEnd.x,
-              y: 0.25 * routeStart.y + 0.5 * cy + 0.25 * routeEnd.y,
-            };
-            modeX = bezierMid.x + normalX * (22 + (index % 2) * 12);
-            modeY = bezierMid.y + normalY * (22 + (index % 2) * 12);
-            arrowLabelX = routeEnd.x - normalX * 15;
-            arrowLabelY = routeEnd.y - normalY * 15;
+            const outbound = buildRoutePathInfo(start, end, leg.style, 1);
+            const returnPath = leg.loopback ? buildRoutePathInfo(end, start, leg.style, 1) : null;
+            paths = returnPath ? [outbound.path, returnPath.path] : [outbound.path];
+            modeX = outbound.modeX + (index % 2) * outbound.normalX * 12;
+            modeY = outbound.modeY + (index % 2) * outbound.normalY * 12;
+            arrowLabelX = outbound.arrowLabelX;
+            arrowLabelY = outbound.arrowLabelY;
           }
           const destinationDay = project.stops.find((stop) => stop.id === leg.to)?.dayLabel;
           const modeIconMap: Record<string, string> = {
@@ -655,25 +692,29 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           const legIconSize = 16 * symbolScale;
           const sizedLegIcon = legIconSvg ? sizeIconSvg(legIconSvg, { width: legIconSize, height: legIconSize, color: canvasFg }) : null;
           const legColor = linePathColor ?? transportColor(leg.mode, leg.style.color, vividTransportColors);
+          const showLegArrowhead = showArrowheads !== false && leg.style.showArrowhead !== false;
           const modeLabel = leg.mode.toUpperCase();
           const modeFontSize = 8 * textScale;
           const modePillWidth = Math.max(68, modeLabel.length * modeFontSize * 0.72 + 18);
           const modePillHeight = Math.max(20, modeFontSize + 10);
           return (
-            <g key={leg.id} onClick={() => selectObject(leg.id)} className="cursor-pointer">
-              {showLineHalo ? <path d={path} fill="none" stroke={lineHaloColor ?? "#ffffff"} strokeWidth={10 * lineScale} strokeLinecap="round" /> : null}
-              <path
-                d={path}
-                fill="none"
-                stroke={legColor}
-                strokeWidth={(selectedObjectId === leg.id ? 5 : 3) * lineScale}
-                strokeDasharray={leg.style.line === "dashed" ? "10 9" : leg.style.line === "dotted" ? "1 7" : undefined}
-                strokeLinecap="round"
-                markerEnd="url(#symbolic-arrow-strong)"
-              />
-              {extraArrowheads ? directionArrowheads(path).map((arrow, arrowIndex) => (
+            <g key={leg.id} onClick={() => selectObject(leg.id)} onDoubleClick={() => requestObjectEdit(leg.id)} className="cursor-pointer">
+              {paths.map((path, pathIndex) => showLineHalo ? <path key={`${leg.id}-halo-${pathIndex}`} d={path} fill="none" stroke={lineHaloColor ?? "#ffffff"} strokeWidth={10 * lineScale} strokeLinecap="round" /> : null)}
+              {paths.map((path, pathIndex) => (
                 <path
-                  key={`${leg.id}-arrow-${arrowIndex}`}
+                  key={`${leg.id}-route-${pathIndex}`}
+                  d={path}
+                  fill="none"
+                  stroke={legColor}
+                  strokeWidth={(selectedObjectId === leg.id ? 5 : 3) * lineScale}
+                  strokeDasharray={leg.style.line === "dashed" ? "10 9" : leg.style.line === "dotted" ? "1 7" : undefined}
+                  strokeLinecap="round"
+                  markerEnd={showLegArrowhead ? "url(#symbolic-arrow-strong)" : undefined}
+                />
+              ))}
+              {extraArrowheads && showLegArrowhead ? paths.flatMap((path, pathIndex) => directionArrowheads(path).map((arrow, arrowIndex) => (
+                <path
+                  key={`${leg.id}-arrow-${pathIndex}-${arrowIndex}`}
                   d={`M${arrow.start.x} ${arrow.start.y} L${arrow.end.x} ${arrow.end.y}`}
                   fill="none"
                   stroke={legColor}
@@ -682,7 +723,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
                   markerEnd="url(#symbolic-arrow-strong)"
                   pointerEvents="none"
                 />
-              )) : null}
+              ))) : null}
               <g
                 transform={`translate(${modeX} ${modeY})`}
                 className="cursor-move"
@@ -756,6 +797,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
               tabIndex={0}
               aria-label={`${stop.name}, ${stop.dayLabel}`}
               onClick={() => selectObject(stop.id)}
+              onDoubleClick={() => requestObjectEdit(stop.id)}
               onPointerDown={(event) => {
                 event.currentTarget.setPointerCapture(event.pointerId);
                 setDragging({ id: stop.id, type: "stop" });
@@ -791,7 +833,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
               ) : null}
               <g transform={`translate(${labelLayout.x + stop.labelOffset[0]} ${labelLayout.y + stop.labelOffset[1]})`}>
                 <rect x={labelLayout.rectX} y={labelLayout.rectY} width={labelWidth} height={labelHeight} rx="4" fill="var(--canvas-muted, var(--muted))" stroke="var(--canvas-fg, var(--muted-foreground))" />
-                <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.nameY} fill={labelStyle.color} fontSize={nameFontSize} fontWeight={labelStyle.bold ? "700" : "500"}>
+                <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.nameY} fill={labelStyle.color === "#18221d" ? "var(--canvas-fg, var(--foreground))" : labelStyle.color} fontSize={nameFontSize} fontWeight={labelStyle.bold ? "700" : "500"}>
                   {stop.name}
                 </text>
                 <text textAnchor="middle" x={labelLayout.textX} y={labelLayout.dayY} fill="var(--canvas-fg, var(--trail))" fontSize={dayFontSize} fontFamily="monospace" fontWeight="800">

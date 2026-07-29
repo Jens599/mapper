@@ -105,6 +105,7 @@ const defaultTravelLegStyle: LegStyle = {
   noiseOctaves: 3,
   noiseModulation: 0,
   color: "#202b25",
+  showArrowhead: true,
 };
 
 function ensureStopStyleDefaults(stop: TravelStop) {
@@ -213,6 +214,7 @@ type EditorState = {
     selectedIconId: string;
     formatClipboard: FormatClipboard | null;
     formatPainterActive: boolean;
+    formatPainterShiftHeld: boolean;
    switchProjectMode: (kind: MapperProject["kind"]) => void;
    replaceProject: (project: MapperProject) => void;
    selectObject: (id: string) => void;
@@ -226,9 +228,10 @@ type EditorState = {
    setTravelDisplay: (display: "geographic" | "symbolic") => void;
     setMapStyle: (style: TravelProject["map"]["style"]) => void;
     updateProjectMeta: (update: ProjectMetaUpdate) => void;
-    copySelectedFormat: () => void;
+    copySelectedFormat: (shiftHeld?: boolean) => void;
     applyFormatToObject: (id: string) => boolean;
     cancelFormatPainter: () => void;
+    cancelShiftFormatPainter: () => void;
    addTravelStop: (stop: NewTravelStop) => void;
    addTravelLeg: (leg: NewTravelLeg) => void;
    updateTravelStop: (id: string, update: TravelStopUpdate) => void;
@@ -286,6 +289,7 @@ export const useEditorStore = create<EditorState>()(
       selectedIconId: "carbon-mountain",
       formatClipboard: null,
       formatPainterActive: false,
+      formatPainterShiftHeld: false,
      switchProjectMode: (kind) => {
        set((state) => {
          if (state.project.kind === kind) return;
@@ -335,6 +339,7 @@ export const useEditorStore = create<EditorState>()(
           }
           if (state.formatPainterActive && applyFormat(state, id)) {
             state.formatPainterActive = false;
+            state.formatPainterShiftHeld = false;
           }
           state.selectedObjectId = id;
           state.selectedIds = [id];
@@ -491,12 +496,13 @@ export const useEditorStore = create<EditorState>()(
         }
       });
     },
-    copySelectedFormat: () => {
+    copySelectedFormat: (shiftHeld) => {
       set((state) => {
         const format = readFormat(state.project, state.selectedObjectId);
         if (!format) return;
         state.formatClipboard = format;
         state.formatPainterActive = true;
+        state.formatPainterShiftHeld = Boolean(shiftHeld);
       });
     },
     applyFormatToObject: (id) => {
@@ -505,6 +511,7 @@ export const useEditorStore = create<EditorState>()(
         applied = applyFormat(state, id);
         if (applied) {
           state.formatPainterActive = false;
+          state.formatPainterShiftHeld = false;
           state.selectedObjectId = id;
           state.selectedIds = [id];
         }
@@ -514,6 +521,14 @@ export const useEditorStore = create<EditorState>()(
     cancelFormatPainter: () => {
       set((state) => {
         state.formatPainterActive = false;
+        state.formatPainterShiftHeld = false;
+      });
+    },
+    cancelShiftFormatPainter: () => {
+      set((state) => {
+        if (!state.formatPainterShiftHeld) return;
+        state.formatPainterActive = false;
+        state.formatPainterShiftHeld = false;
       });
     },
     addTravelStop: (stop) => {
@@ -547,7 +562,7 @@ export const useEditorStore = create<EditorState>()(
       set((state) => {
         if (
           state.project.kind !== "travel" ||
-          (leg.from === leg.to && !leg.loopback) ||
+          leg.from === leg.to ||
           !leg.name.trim()
         ) return;
         const stopIds = new Set(state.project.stops.map((stop) => stop.id));
@@ -570,10 +585,11 @@ export const useEditorStore = create<EditorState>()(
              noiseSeed: 42,
              noiseAmplitude: 0,
              noiseScale: 2,
-             noiseOctaves: 3,
-             noiseModulation: 0,
-             color: leg.mode === "flight" ? "#216b8b" : leg.mode === "walk" ? "#ad4a24" : "#202b25",
-           },
+              noiseOctaves: 3,
+              noiseModulation: 0,
+              color: leg.mode === "flight" ? "#216b8b" : leg.mode === "walk" ? "#ad4a24" : "#202b25",
+              showArrowhead: true,
+            },
            visible: true,
          });
         state.selectedObjectId = id;
@@ -841,8 +857,9 @@ export const useEditorStore = create<EditorState>()(
           lineScale: 1,
           textScale: 1,
           symbolScale: 1,
-          arrowheadScale: 1,
+          arrowheadScale: 0.5,
           lineHaloColor: "#ffffff",
+          showArrowheads: true,
           showModeIcons: false,
           showLineHalo: true,
           showLegend: false,

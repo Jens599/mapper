@@ -70,6 +70,7 @@ const mapperProjectSchema = {
         arrowheadScale: { type: "number", minimum: 0.4, maximum: 2 },
         lineHaloColor: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" },
         linePathColor: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" },
+        showArrowheads: { type: "boolean" },
         showModeIcons: { type: "boolean" },
         showLineHalo: { type: "boolean" },
         showLegend: { type: "boolean" },
