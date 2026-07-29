@@ -351,6 +351,19 @@ function requestObjectEdit(id: string) {
   window.dispatchEvent(new CustomEvent("mapper:edit-object", { detail: { id } }));
 }
 
+function isLightPointFill(fill: string | undefined) {
+  if (!fill) return false;
+  const normalized = fill.trim().toLowerCase();
+  if (normalized === "transparent" || normalized === "none") return true;
+  const match = normalized.match(/^#([0-9a-f]{6})$/i);
+  if (!match) return false;
+  const value = match[1];
+  const red = Number.parseInt(value.slice(0, 2), 16);
+  const green = Number.parseInt(value.slice(2, 4), 16);
+  const blue = Number.parseInt(value.slice(4, 6), 16);
+  return (red * 299 + green * 587 + blue * 114) / 1000 > 220;
+}
+
 export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const selectObject = useEditorStore((state) => state.selectObject);
   const selectedObjectId = useEditorStore((state) => state.selectedObjectId);
@@ -799,7 +812,11 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           if (!position) return null;
           const anchor = stop.labelAnchor === "auto" ? (index % 2 === 0 ? "top" : "bottom") : stop.labelAnchor;
           const iconSvg = getPointIconSvg(stop.icon, project.iconAssets);
-          const sizedIcon = iconSvg ? sizeIconSvg(iconSvg, { width: 20, height: 20, color: canvasFg }) : null;
+          const pointStyle = stop.pointStyle;
+          const pointFill = pointStyle?.fill ?? "var(--canvas-muted, var(--muted))";
+          const pointStroke = pointStyle?.showStroke === false ? "none" : pointStyle?.stroke ?? "var(--canvas-fg, var(--trail))";
+          const iconColor = pointStyle?.showFill === false || isLightPointFill(pointStyle?.fill) ? canvasFg : foregroundFromBackground(pointStyle?.fill ?? project.map.background);
+          const sizedIcon = iconSvg ? sizeIconSvg(iconSvg, { width: 20, height: 20, color: iconColor }) : null;
           const endpointRole = index === 0 ? "START" : index === project.stops.length - 1 ? "FINISH" : null;
           const displayedDayLabel = sequentialDayLabels ? `Day ${index + 1}` : stop.dayLabel;
           const markerRadius = emphasizeEndpoints && endpointRole ? 17 : 13;
@@ -859,10 +876,10 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
               {emphasizeEndpoints && endpointRole ? (
                 <circle r={markerRadius + 4} fill="none" stroke={endpointRole === "START" ? "#0b73a8" : "#c2410c"} strokeWidth="2.5" />
               ) : null}
-              {stop.pointStyle?.showFill !== false ? (
-              <circle r={markerRadius} fill={stop.pointStyle?.fill ?? "var(--canvas-muted, var(--muted))"} stroke={stop.pointStyle?.showStroke === false ? "none" : stop.pointStyle?.stroke ?? "var(--canvas-fg, var(--trail))"} strokeWidth={stop.pointStyle?.strokeWidth ?? 2.5} />
-              ) : stop.pointStyle?.showStroke !== false ? (
-              <circle r={markerRadius} fill="none" stroke={stop.pointStyle?.stroke ?? "var(--canvas-fg, var(--trail))"} strokeWidth={stop.pointStyle?.strokeWidth ?? 2.5} />
+              {pointStyle?.showFill !== false ? (
+              <circle r={markerRadius} fill={pointFill} stroke={pointStroke} strokeWidth={pointStyle?.strokeWidth ?? 2.5} />
+              ) : pointStyle?.showStroke !== false ? (
+              <circle r={markerRadius} fill="none" stroke={pointStroke} strokeWidth={pointStyle?.strokeWidth ?? 2.5} />
               ) : null}
               {sizedIcon ? (
                 <g transform="translate(-10 -10)" fill="var(--canvas-fg, var(--trail))" color="var(--canvas-fg, var(--trail))" dangerouslySetInnerHTML={{ __html: sizedIcon }} />
