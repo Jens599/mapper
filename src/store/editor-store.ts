@@ -840,6 +840,7 @@ export const useEditorStore = create<EditorState>()(
           lineScale: 1,
           textScale: 1,
           symbolScale: 1,
+          arrowheadScale: 1,
           showModeIcons: false,
           showLineHalo: true,
           showLegend: false,

@@ -630,6 +630,7 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
   const lineScale = Number.isFinite(presentation.lineScale) ? presentation.lineScale : 1;
   const textScale = Number.isFinite(presentation.textScale) ? presentation.textScale : 1;
   const symbolScale = Number.isFinite(presentation.symbolScale) ? presentation.symbolScale : 1;
+  const arrowheadScale = Number.isFinite(presentation.arrowheadScale) ? presentation.arrowheadScale : 1;
 
   if (!mapSettings) return null;
 
@@ -808,6 +809,7 @@ function TerrainProperties({ idPrefix }: { idPrefix: string }) {
         </p>
         <Button variant="outline" size="sm" onClick={resetPresentation}>Reset scales</Button>
         <NoiseControl id={`${idPrefix}line-scale`} label="Lines" value={lineScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("lineScale", value)} />
+        <NoiseControl id={`${idPrefix}arrowhead-scale`} label="Arrowheads" value={arrowheadScale} min={0.4} max={2} step={0.05} onChange={(value) => updatePresentation("arrowheadScale", value)} />
         <NoiseControl id={`${idPrefix}text-scale`} label="Text" value={textScale} min={0.5} max={3} step={0.05} onChange={(value) => updatePresentation("textScale", value)} />
         <NoiseControl id={`${idPrefix}symbol-global-scale`} label="Symbols" value={symbolScale} min={0.25} max={4} step={0.05} onChange={(value) => updatePresentation("symbolScale", value)} />
       </div>

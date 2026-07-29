@@ -206,6 +206,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
     lineScale: rawLineScale,
     textScale: rawTextScale,
     symbolScale: rawSymbolScale,
+    arrowheadScale: rawArrowheadScale,
     showLineHalo,
     showLegend,
     showTitleBlock,
@@ -220,6 +221,7 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
   const lineScale = Number.isFinite(rawLineScale) ? rawLineScale : 1;
   const textScale = Number.isFinite(rawTextScale) ? rawTextScale : 1;
   const symbolScale = Number.isFinite(rawSymbolScale) ? rawSymbolScale : 1;
+  const arrowheadScale = Number.isFinite(rawArrowheadScale) ? rawArrowheadScale : 1;
   const legendItems: Array<[string, string, string | undefined]> = [
     ["Flight", transportColor("flight", "#216b8b", vividTransportColors), "8 6"],
     ["Drive", transportColor("drive", "#202b25", vividTransportColors), undefined],
@@ -432,10 +434,10 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           Positions are illustrative and not geographically accurate.
         </desc>
         <defs>
-          <marker id="symbolic-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <marker id="symbolic-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth={6 * arrowheadScale} markerHeight={6 * arrowheadScale} orient="auto-start-reverse">
             <path d="M0 0 10 5 0 10Z" fill="context-stroke" />
           </marker>
-          <marker id="symbolic-arrow-strong" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <marker id="symbolic-arrow-strong" viewBox="0 0 10 10" refX="8" refY="5" markerWidth={8 * arrowheadScale} markerHeight={8 * arrowheadScale} orient="auto-start-reverse">
             <path d="M0 0 10 5 0 10Z" fill="context-stroke" />
           </marker>
         </defs>
