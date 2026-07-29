@@ -562,6 +562,10 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
           const legIconSize = 16 * symbolScale;
           const sizedLegIcon = legIconSvg ? sizeIconSvg(legIconSvg, { width: legIconSize, height: legIconSize, color: canvasFg }) : null;
           const legColor = transportColor(leg.mode, leg.style.color, vividTransportColors);
+          const modeLabel = leg.mode.toUpperCase();
+          const modeFontSize = 8 * textScale;
+          const modePillWidth = Math.max(68, modeLabel.length * modeFontSize * 0.72 + 18);
+          const modePillHeight = Math.max(20, modeFontSize + 10);
           return (
             <g key={leg.id} onClick={() => selectObject(leg.id)} className="cursor-pointer">
               {showLineHalo ? <path d={path} fill="none" stroke="var(--card)" strokeWidth={10 * lineScale} strokeLinecap="round" /> : null}
@@ -603,9 +607,9 @@ export function SymbolicTravelCanvas({ project }: { project: TravelProject }) {
                   </>
                 ) : (
                   <>
-                    <rect x="-34" y="-10" width="68" height="20" rx="10" fill="var(--canvas-muted, var(--muted))" stroke={legColor} />
-                    <text textAnchor="middle" y="3" fill="var(--canvas-fg, var(--foreground))" fontSize={8 * textScale} fontFamily="monospace" fontWeight="700">
-                      {leg.mode.toUpperCase()}
+                    <rect x={-modePillWidth / 2} y={-modePillHeight / 2} width={modePillWidth} height={modePillHeight} rx={modePillHeight / 2} fill="var(--canvas-muted, var(--muted))" stroke={legColor} />
+                    <text textAnchor="middle" y={modeFontSize * 0.35} fill="var(--canvas-fg, var(--foreground))" fontSize={modeFontSize} fontFamily="monospace" fontWeight="700">
+                      {modeLabel}
                     </text>
                   </>
                 )}

@@ -75,9 +75,9 @@ function mapperCompletionSource(context: CompletionContext) {
 const vscodeTheme = EditorView.theme(
   {
     "&": { backgroundColor: "#1e1e1e", color: "#d4d4d4", fontSize: "13px", height: "100%" },
-    ".cm-editor": { height: "100%" },
+    "&.cm-editor": { height: "100%" },
     ".cm-content": { caretColor: "#aeafad", fontFamily: "var(--font-plex-mono), monospace" },
-    ".cm-scroller": { height: "100%", overflow: "auto" },
+    ".cm-scroller": { height: "100%", overflow: "auto !important" },
     ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#aeafad" },
     ".cm-gutters": { backgroundColor: "#1e1e1e", color: "#858585", border: "none" },
     ".cm-activeLine": { backgroundColor: "#2a2d2e" },
@@ -220,7 +220,8 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
         <div className="min-h-0 flex-1 overflow-hidden bg-[#1e1e1e]">
           <CodeMirror
             value={source}
-            height="100%"
+            height="calc(100dvh - 11rem)"
+            className="size-full"
             theme={vscodeTheme}
             extensions={[
               yaml(),
