@@ -196,7 +196,7 @@
   .mapper-stop__dot svg {
     width: 0.82rem;
     height: 0.82rem;
-    color: var(--trail);
+    color: currentColor;
   }
 
   .mapper-stop__label {

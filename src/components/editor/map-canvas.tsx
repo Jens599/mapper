@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { TrailCanvas } from "@/components/editor/trail-canvas";
 import { SymbolicTravelCanvas } from "@/components/editor/symbolic-travel-canvas";
 import { getIconSvg, getPointIconSvg } from "@/lib/builtin-icons";
+import { foregroundFromBackground } from "@/lib/color-utils";
 import {
   Tooltip,
   TooltipContent,
@@ -299,6 +300,18 @@ function createStopElement(
   const dot = document.createElement("span");
   dot.className = "mapper-stop__dot";
   dot.setAttribute("aria-hidden", "true");
+  const pointStyle = stop.pointStyle;
+  const pointFill = pointStyle?.fill ?? "#e9efeb";
+  const pointStroke = pointStyle?.stroke ?? "#18221d";
+  const showFill = pointStyle?.showFill !== false;
+  const showStroke = pointStyle?.showStroke !== false;
+  dot.style.background = showFill ? pointFill : "transparent";
+  dot.style.borderColor = showStroke ? pointStroke : "transparent";
+  dot.style.borderWidth = `${pointStyle?.strokeWidth ?? 2.5}px`;
+  dot.style.color = showFill ? foregroundFromBackground(pointFill) : pointStroke;
+  dot.style.boxShadow = showStroke
+    ? `0 0 0 1px color-mix(in srgb, ${pointStroke} 55%, transparent)`
+    : "none";
   if (iconSvg) dot.innerHTML = iconSvg;
 
   const label = document.createElement("span");
