@@ -28,8 +28,6 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
   const [pending, startTransition] = useTransition();
   const [fullscreen, setFullscreen] = useState(false);
   const [plainEditor, setPlainEditor] = useState(false);
-  const [editorHeight, setEditorHeight] = useState(520);
-  const editorFrameRef = useRef<HTMLDivElement>(null);
   const userEdited = useRef(false);
 
   useEffect(() => {
@@ -43,19 +41,6 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (open && !userEdited.current) setSource(serializeProject(project));
   }, [open, project]);
-
-  useEffect(() => {
-    if (!open || !editorFrameRef.current) return;
-    const update = () => setEditorHeight(Math.max(260, editorFrameRef.current?.clientHeight ?? 520));
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(editorFrameRef.current);
-    window.addEventListener("resize", update);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", update);
-    };
-  }, [open, fullscreen, plainEditor]);
 
   useEffect(() => {
     if (!open) return;
@@ -130,7 +115,7 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            <div ref={editorFrameRef} className="min-h-0 flex-1 bg-[#1e1e1e]">
+            <div className="min-h-0 flex-1 overflow-hidden bg-[#1e1e1e]">
               {plainEditor ? (
                 <textarea
                   value={source}
@@ -142,7 +127,7 @@ export function ProjectBuilder({ children }: { children: React.ReactNode }) {
               ) : (
                 <MonacoEditor
                   value={source}
-                  height={`${editorHeight}px`}
+                  height="100%"
                   language="yaml"
                   path={`${project.id}.mapper.yaml`}
                   theme="mapper-dark"
